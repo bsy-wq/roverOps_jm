@@ -1,0 +1,193 @@
+<launch>
+    <arg name="is_real_world"/>
+    <arg name="navi_mode"/>
+    <arg name="sensor_type"/>
+    <arg name="body_pose_topic"/>
+    <arg name="sensor_pose_topic"/>
+    <arg name="cloud_topic"/>
+    <arg name="cloud_is_world"/>
+    <arg name="depth_topic"/>
+    <arg name="cx"/>
+    <arg name="cy"/>
+    <arg name="fx"/>
+    <arg name="fy"/>
+    <!-- public parameters -->
+    <arg name="max_vel" default="0.7"/>
+    <arg name="max_acc" default="0.4"/>
+    <arg name="planning_horizon" default="5.0"/>
+    <!-- 从全局上截取多长作为局部优化的目标。-->
+    <!-- main node -->
+    <node pkg="scan_planner" name="scan_planner_node" type="scan_planner_node" output="screen" clear_params="true">
+        <remap from="/grid_map/body_pose" to="$(arg body_pose_topic)"/>
+        <remap from="/grid_map/sensor_pose" to="$(arg sensor_pose_topic)"/>
+        <param name="grid_map/sensor_type" value="$(arg sensor_type)" type="str"/>
+        <remap from="/grid_map/cloud" to="$(arg cloud_topic)"/>
+        <param name="grid_map/cloud_is_world" value="$(arg cloud_is_world)"/>
+        <remap from="/grid_map/depth" to="$(arg depth_topic)"/>
+        <param name="grid_map/need_extrinsic" value="$(arg cloud_is_world)" type="bool"/>
+        <!-- planning fsm -->
+        <param name="fsm/navi_mode" value="$(arg navi_mode)" type="int"/>
+        <param name="fsm/thresh_replan" value="0.2" type="double"/>
+        <!-- 触发重新规划的位移阈值 -->
+        <param name="fsm/thresh_no_replan" value="0.1" type="double"/>
+        <!--  临近终点停止规划的阈值 -->
+        <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+        <param name="fsm/emergency_time_" value="1.0" type="double"/>
+        <!--  如果预测1s内会撞上且无法避障，则EMERGENCY_STOP -->
+        <param name="fsm/fail_safe" value="true" type="bool"/>
+        <!--  安全开关。开启后，如果规划连续失败会强制停止 -->
+        <param name="fsm/max_replan_fail_count" value="1000" type="int"/>
+        <!--  允许规划失败的最大次数 -->
+        <param name="fsm/is_real_world" value="$(arg is_real_world)" type="bool"/>
+        <!-- 新增：长方形机身旋转避障配置 -->
+        <param name="fsm/enable_rotation_check" value="true" type="bool"/>
+        <!-- 开关：true开启，false关闭 -->
+        <param name="fsm/rot_check_len_front" value="0.45" type="double"/>
+        <!-- 中心到车头距离 (m) -->
+        <param name="fsm/rot_check_len_back" value="0.45" type="double"/>
+        <!-- 中心到车尾距离 (m) -->
+        <param name="fsm/rot_check_half_width" value="0.24" type="double"/>
+        <!-- 机身半宽 (m，总宽0.36m) -->
+        <param name="fsm/rot_check_max_sweep" value="0.8" type="double"/>
+        <!-- 预测旋转角最大检测范围 (rad，约35度) -->
+        <!-- 空间物理绝对红线参数 (贴脸急停) -->
+        <param name="fsm/redline_crash_dist" value="0.10" type="double"/>
+        <!-- 前方致命急停红线距离 (m) -->
+        <param name="fsm/redline_half_width" value="0.15" type="double"/>
+        <!-- 红线检测区域半宽 (m) -->
+        <param name="fsm/redline_step" value="0.05" type="double"/>
+        <!-- 红线前向采样步长 (m) -->
+        <!-- sliding map -->
+        <param name="grid_map/resolution" value="0.05"/>
+        <!-- 每个栅格的大小 -->
+        <param name="grid_map/sliding_map_size_x" value="10.0"/>
+        <!-- 滑动窗口地图的大小 -->
+        <param name="grid_map/sliding_map_size_y" value="10.0"/>
+        <param name="grid_map/sliding_map_size_z" value="5.0"/>
+        <param name="grid_map/map_sliding_thresh" value="0.2"/>
+        <!-- 地图更新触发位移 -->
+        <param name="grid_map/double_cylinder_radius" value="0.24"/>
+        <!-- 宽 ≈ 2 * 半径-->
+        <param name="grid_map/double_cylinder_offset" value="0.21"/>
+        <!-- 长 ≈ 2 * 偏移量 + 2 * 半径-->
+        <param name="grid_map/body_height" value="0.62"/>
+        <param name="grid_map/obstacles_inflation_z_up" value="0.4"/>
+        <!-- 处理地面碰撞安全距离-->
+        <param name="grid_map/obstacles_inflation_z_down" value="0.4"/>
+        <!-- 限高碰撞安全距离  0.35   0.45height-->
+        <!-- depth camera intrinsics -->
+        <param name="grid_map/cx" value="$(arg cx)"/>
+        <param name="grid_map/cy" value="$(arg cy)"/>
+        <param name="grid_map/fx" value="$(arg fx)"/>
+        <param name="grid_map/fy" value="$(arg fy)"/>
+        <!-- depth -->
+        <param name="grid_map/depth_filter_maxdist" value="3.0"/>
+        <param name="grid_map/depth_filter_mindist" value="0.3"/>
+        <param name="grid_map/depth_filter_margin" value="9"/>
+        <param name="grid_map/k_depth_scaling_factor" value="1000.0"/>
+        <param name="grid_map/skip_pixel" value="2"/>
+        <!-- local fusion -->
+        <param name="grid_map/p_hit" value="0.85"/>
+        <!-- 传感器观测到障碍物时的置信度增加值 0.85  0.9-->
+        <param name="grid_map/p_miss" value="0.35"/>
+        <!--未观测到障碍物时的置信度减小值  0.30-->
+        <param name="grid_map/p_min" value="0.12"/>
+        <!-- 栅格占据概率的上下限及判定为“占据”的阈值 -->
+        <param name="grid_map/p_max" value="0.98"/>
+        <!--栅格占据概率的上下限及判定为“占据”的阈值  -->
+        <param name="grid_map/p_occ" value="0.8"/>
+        <!-- 判定为“占据”的阈值0.80 -->
+        <param name="grid_map/max_ray_length" value="6.0"/>
+        <!-- 超过 5m 的传感器数据将被忽略或处理为自由空间 -->
+        <param name="grid_map/vis_height" value="0.25" type="double"/>
+        <!-- 可视化高度截断阈值 -->
+        <!-- 新增：时间衰减参数配置 -->
+        <param name="grid_map/decay_enable" value="true" type="bool"/>
+        <param name="grid_map/decay_time_thresh" value="4.0" type="double"/>
+        <!-- 1.0秒未观测到则判定离开视野/盲区 -->
+        <param name="grid_map/decay_rate" value="2.0" type="double"/>
+        <!-- 衰减速率，5大约0.4s内彻底清除 -->
+        <!-- planner manager -->
+        <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
+        <!-- 轨迹允许的最大速度 -->
+        <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>
+        <!--  -->
+        <param name="manager/max_jerk" value="4" type="double"/>
+        <!--  -->
+        <param name="manager/control_points_distance" value="0.5" type="double"/>
+        <!-- B样条控制点之间的平均距离。点越密轨迹越灵活但计算量越大。-->
+        <param name="manager/feasibility_tolerance" value="0.5" type="double"/>
+        <!-- 物理可行性松弛。检查轨迹是否超速时允许的溢出比例  -->
+        <param name="manager/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+        <!--  -->
+        <!-- trajectory optimization -->
+        <param name="optimization/lambda_smooth" value="1.0" type="double"/>
+        <!-- 轨迹平滑度权重。越大，轨迹越像直线  1.0，窄道0.6-0.8-->
+        <param name="optimization/lambda_collision" value="1.5" type="double"/>
+        <!--  避障权重。越大，轨迹离障碍物越远。 -->
+        <param name="optimization/lambda_feasibility" value="0.2" type="double"/>
+        <!--动力学可行性权重 0.1不动 -->
+        <param name="optimization/lambda_fitness" value="1.0" type="double"/>
+        <!-- 轨迹贴合度权重。越大，生成的局部轨迹越贴合原始全局路径。 -->
+        <param name="optimization/dist0" value="0.2" type="double"/>
+        <!-- 避障安全距离阈值（0.2m）。距障碍物小于此值时会产生斥力。窄道0.15 -->
+        <param name="optimization/enable_narrow_adaptation" value="false" type="bool"/>
+        <!-- 窄道自适应切换开关: true开启 / false关闭 -->
+        <param name="optimization/max_vel" value="$(arg max_vel)" type="double"/>
+        <!--  -->
+        <param name="optimization/vel_tolerance" value="1.0" type="double"/>
+        <!--  -->
+        <param name="optimization/max_acc" value="$(arg max_acc)" type="double"/>
+        <!--  -->
+        <param name="optimization/acc_tolerance" value="1.0" type="double"/>
+        <!--  -->
+    </node>
+    <!-- trajectory tracking -->
+    <param name="closed_loop_controller/time_forward" value="0.1" type="double"/>
+    <!-- 用于计算机器人当前应该朝向的方向  0.9-->
+    <param name="closed_loop_controller/heading_error_threshold" value="0.8" type="double"/>
+    <!-- 航向角误差阈值（0.8 rad） -->
+    <param name="closed_loop_controller/kp_pos" value="0.8" type="double"/>
+    <!--  0.8-->
+    <param name="closed_loop_controller/kp_yaw" value="1.0" type="double"/>
+    <!-- 转向纠偏力度 (P控制参数) -->
+    <param name="closed_loop_controller/max_vx" value="$(arg max_vel)" type="double"/>
+    <!--  -->
+    <param name="closed_loop_controller/max_vy" value="0.8" type="double"/>
+    <!--  -->
+    <param name="closed_loop_controller/max_vyaw" value="0.8" type="double"/>
+    <!--  -->
+    <param name="closed_loop_controller/finish_dist" value="0.2" type="double"/>
+    <!-- 到达判定距离 -->
+    <!-- 控制器朝向推算的车身包围盒及搜索步长 -->
+    <param name="closed_loop_controller/box_front" value="0.20" type="double"/>
+    <!-- 中心到车头距离 (m) -->
+    <param name="closed_loop_controller/box_back" value="0.20" type="double"/>
+    <!-- 中心到车尾距离 (m) -->
+    <param name="closed_loop_controller/box_half_width" value="0.20" type="double"/>
+    <!-- 车身半宽 (m) -->
+    <param name="closed_loop_controller/box_t_step" value="0.05" type="double"/>
+    <!-- 前瞻轨迹时间搜索步长 (s) -->
+    <!-- 是否使能Y轴平移速度：true=全向移动(默认), false=仅使用X和Yaw -->
+    <param name="closed_loop_controller/enable_y_velocity" value="true" type="bool"/>
+    <!-- 新增：机器人的死区速度（启动所需最小速度），根据底盘测出来填 -->
+    <param name="closed_loop_controller/deadzone_vx" value="0.2" type="double"/>
+    <param name="closed_loop_controller/deadzone_vy" value="0.1" type="double"/>
+    <param name="closed_loop_controller/deadzone_vyaw" value="0.0" type="double"/>
+    <!-- 新增：底层机器人对应的物理最大速度 -->
+    <!-- (如果不填，代码里默认它等于上面设置的算法 max_vx / max_vyaw) -->
+    <param name="closed_loop_controller/robot_max_vx" value="0.7" type="double"/>
+    <param name="closed_loop_controller/robot_max_vy" value="0.8" type="double"/>
+    <param name="closed_loop_controller/robot_max_vyaw" value="0.8" type="double"/>
+    <!-- 新增：急停后退配置 (持续时间 / 后退速度) -->
+    <!-- 若不想后退直接停死，将 duration 或 vx 改为 0.0 即可 -->
+    <param name="closed_loop_controller/brake_back_duration" value="0.0" type="double"/>
+    <!-- 后退持续秒数 -->
+    <param name="closed_loop_controller/brake_back_vx" value="-0.0" type="double"/>
+    <!-- 后退速度 (负数 m/s) -->
+    <!-- ==================== 新增：楼梯直行与安全参数（免编译可调） ==================== -->
+    <!-- 楼梯上的最大旋转角速度 (rad/s)，建议 0.15~0.25，防止大幅度甩头 -->
+    <param name="closed_loop_controller/stair_max_vyaw" value="0.5" type="double"/>
+    <!-- 楼梯上的最大前进速度 (m/s)，建议放慢保证平稳 -->
+    <param name="closed_loop_controller/stair_max_vx" value="0.5" type="double"/>
+</launch>

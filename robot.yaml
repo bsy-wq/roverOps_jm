@@ -1,0 +1,28 @@
+app:
+  name: "robot_dog"
+  environment: "ceshi"
+  version: "1.0.0"
+
+robot:
+  sn: "M20-P1-bsy"
+
+network:
+  http:
+    ip: "122.192.33.182"
+    port: 2800
+
+  gateway:
+    host: "122.192.33.182" # websocket 修改ip
+    port: 8598
+    protocol: "ws"
+
+  endpoints:
+    register: "/robot/ws/robotDog"
+    navbridge: "/robot/ws/device/nav_bridge"
+
+udp:
+  port: 19001
+
+parameter:
+  xml_path: "/home/jianmi/grebotMap_jm/advanced_param.xml"
+  yaml_path: "/home/jianmi/grebotMap_jm/params.yaml"

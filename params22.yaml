@@ -1,0 +1,87 @@
+# PCT Planner ROS Configuration
+scene: "navmap"  # 场景/地图类型标识符，此处使用 "fused_map"
+
+# ROS interface parameters
+ros:
+  # Planner topics (规划器话题)
+  odom_topic: "/localization"           # 机器人里程计 (Odometry) 输入话题
+  goal_topic: "/goal"           # 接收目标点 (Goal) 输入话题
+  path_topic: "/global_path"    # 发布全局路径 (Global Path) 输出话题
+  dock_topic: "/dock_pose"              # 【新增】自动回充/充电桩目标位姿话题
+  
+  # Frame IDs (坐标系 ID)
+  map_frame: "map"              # 地图坐标系 ID
+  base_frame: "base_link"       # 机器人基座坐标系 ID
+  
+  # Tomography/Sensing topics (层析/感知话题)
+  pointcloud_topic: "/pointcloud" # 原始点云 (Point Cloud) 输入话题
+  layer_G_topic: "/layer_G"       # 地面层 (Ground Layer) 输出话题
+  layer_C_topic: "/layer_C"       # 障碍物层 (Clearance Layer) 输出话题
+  tomogram_topic: "/tomogram"     # 层析图/成本图 (Tomogram/Costmap) 输出话题
+
+# Planner parameters (规划器参数)
+pct_planner:
+  use_quintic: true         # 是否使用五次多项式 (Quintic) 进行轨迹生成 (通常用于平滑度更好的路径)
+  max_heading_rate: 10.0    # 机器人最大航向角变化率 (Max Heading Rate) [rad/s]
+
+# Tomography parameters (层析/成本图参数)
+tomography:
+  resolution:  0.11  #0.08          # 层析图/成本图的分辨率 [m/cell]
+  slice_dh: 0.5             # 成本图切片的高度间隔 (Slice Height Interval) [m]
+  ground_h: -10.0             # 地面高度参考值 (Ground Height Reference) [m]
+
+  kernel_size: 7            # 用于处理点云或生成层析图的卷积核/滤波器尺寸 (Kernel Size) [cells]
+  interval_min: 0.50        # 点云垂直间隔最小值 (Vertical Interval Minimum) [m]
+  interval_free: 0.4       # 认为无障碍的垂直间隔 (Vertical Interval for Free Space) [m]
+
+  slope_max: 0.55           # 允许的最大坡度 (Maximum Slope) [rad or dimensionless]
+  step_max: 0.6            # 允许的最大台阶高度 (Maximum Step Height) [m]
+  
+  standable_ratio: 0.05    # 可站立区域的最小比例 (Minimum Standable Ratio)
+  cost_barrier: 50.0        # 障碍物屏障成本 (Cost Barrier) (高于此值的区域视为不可通行)
+  safe_margin: 0.2         # 机器人安全裕度 (Safe Margin) [m] (障碍物周围的额外缓冲距离)
+  inflation: 0.1            # 成本图膨胀半径 (Inflation Radius) [m] (将障碍物成本向外扩展的距离)
+# ==============================================================================
+# 导航调度与局部控制参数 (nav 命名空间)
+# ==============================================================================
+nav:
+  # -------------------- 全局调度与超时 --------------------
+  timeout: 1200.0                       # 单段路径跟踪的超时上限阈值 [s]
+  default_dwell_time: 1.0               # 当航点时间戳异常或未设定停留时间时的默认等待时长 [s]
+
+  # -------------------- 仿真/初始默认位姿 (resetNavState使用) --------------------
+  sim_initial_pose:
+    x: -1.68                            # 仿真初始位姿 X 轴坐标 [m]
+    y: 7.80                             # 仿真初始位姿 Y 轴坐标 [m]
+    z: -6.92                            # 仿真初始位姿 Z 轴高度 [m]
+    yaw: 0.0                            # 仿真初始航向角 Yaw [rad]
+
+  # -------------------- 机器人机构尺寸与接口 --------------------
+  robot_center_offset: 0.385            # 里程计测量中心(如头部传感器)到机器人几何中心/旋转中心的纵向偏置 L [m]
+  external_timeout: 0.5                 # 外部局部规划器 (/my_planner_vel) 速度指令超时判定时间 [s]
+
+  # -------------------- 运行速度限幅 (原地转向与终点精调) --------------------
+  max_vx: 0.6                           # 本地控制器输出的最大前进/后退线速度 [m/s]
+  max_vy: 0.6                           # 本地控制器输出的最大横向平移线速度 (四足横移特性) [m/s]
+  max_w: 0.6                            # 本地控制器输出的最大旋转角速度 [rad/s]
+
+  # -------------------- 路径段切换 --------------------
+  switch_distance: 0.4                  # 当到达当前分段终点小于该距离时，触发切换至下一段 [m]
+
+  # -------------------- 起点原地对齐控制 (Start Alignment) --------------------
+  enable_start_align: false             # 起点原地旋转对齐总开关 (true: 开启, false: 关闭)
+  align_angle_thresh: 0.7               # 触发原地对齐的角度误差阈值 (约 40°)，大于此值进入转向模式 [rad]
+  align_done_thresh: 0.3                # 原地对齐判定完成的角度误差阈值 (约 17°) [rad]
+  align_lookahead_dist: 0.5             # 原地对齐时在路径前方寻找参考目标点的预瞄距离 [m]
+  align_stable_time: 0.8                # 航向达标后需要保持静止观察的稳定时长，防止振荡 [s]
+
+  # -------------------- 终点精准到点控制 (Precision Control) --------------------
+  precision_dist_thresh: 0.3            # 距离最终航点小于此值时，脱离外部规划器接管为全向精调模式 [m]
+  arrive_dist_thresh: 0.25              # 终点位置容差 (平移误差小于此值即判定到达) [m]
+  arrive_angle_thresh: 0.2              # 终点角度容差 (航向误差小于约 11.5° 判定朝向达标) [rad]
+
+  # -------------------- 路径分段与楼梯识别算法 --------------------
+  rdp_epsilon: 0.00001                  # RDP 抽稀算法精度阈值，越小保留点越密集 [m]
+  step_z_thresh: 0.015                  # 相邻两点高度差阈值，大于此值认为存在垂直高度突变 [m]
+  stair_window_size: 4                  # 连续台阶判定窗口 (连续 N 个区间高度超标才判定为楼梯)
+  slope_thresh_deg: 4.0                 # 判定为坡道的俯仰角阈值 [deg]
