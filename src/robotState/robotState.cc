@@ -207,7 +207,7 @@ void robotState::publish_snapshot(const std::string& updated_source)
             {"has_bms_info", has_bms_info_},
             {"navigation_env_active", navigation_env_active_},
             {"map", map_info_},
-            {"version", "0.1.1"}
+            {"version", "M20.01.02.20260923 B"}
         };
 
         if (has_robot_state_) {

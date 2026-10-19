@@ -49,6 +49,7 @@ public:
     void set_device_id(const std::string& device_id);
 
     void setMessageCallback(MessageCallback cb);
+    void setBroadcastCallback(std::function<void(const std::string&)> cb);
     void setConnectedCallback(std::function<void()> cb);
     void broadcast_data(const std::string &payload);
 
@@ -104,6 +105,7 @@ private:
 
     ros::NodeHandle private_nh_;
     MessageCallback message_callback_;
+    std::function<void(const std::string&)> broadcast_callback_;
     std::function<void()> connected_callback_;
     GatewayState state_ = GatewayState::Disconnected;
     mutable std::mutex state_mutex_;

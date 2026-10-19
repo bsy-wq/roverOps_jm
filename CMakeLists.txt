@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.16)
 
 project(robot_dog)
 
@@ -38,15 +38,18 @@ endif()
 add_subdirectory(src/bms)
 add_subdirectory(src/gateway)
 add_subdirectory(src/mapping)
-add_subdirectory(src/navigation)
 add_subdirectory(src/hikvision)
 add_subdirectory(src/robotState)
 add_subdirectory(src/modifyValue)
 add_subdirectory(src/motionControl)
+add_subdirectory(src/broadcast)
+add_subdirectory(src/follow)
 
 add_executable(${PROJECT_NAME}
     src/main.cc
     src/CommandExecutor.cc
+    src/localWebsocket/LocalWebsocketServer.cc
+    src/aiRecognition/AiRecognitionAckHandler.cc
     # src/BmsForwarder.cc
 )
 
@@ -65,9 +68,10 @@ target_link_libraries(${PROJECT_NAME}
     bms
     gateway
     mapping
-    navigation
     hikvision
     robotState
     modifyValue
     motionControl
+    broadcast
+    follow
 )

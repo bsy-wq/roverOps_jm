@@ -7,6 +7,7 @@
 #include <thread>
 
 #include <ros/ros.h>
+#include <robot_gateway/M20V06RobotState.h>
 #include <std_msgs/String.h>
 
 #include "../include/common/json.hpp"
@@ -27,7 +28,7 @@ public:
 private:
     void publish_motion_cmd(const std::string& target_mode,
                             double lin_x, double lin_y, double ang_z);
-    void robot_state_callback(const std_msgs::String::ConstPtr& msg);
+    void robot_state_callback(const robot_gateway::M20V06RobotState::ConstPtr& msg);
     void watchdog_loop();
 
     ros::Publisher motion_cmd_pub_;
@@ -45,7 +46,7 @@ private:
     std::chrono::steady_clock::time_point last_pose_command_time_{};
     std::string last_pose_command_;
     std::atomic<bool> robot_state_received_{false};
-    std::atomic<bool> robot_is_lie_down_{false};
+    std::atomic<bool> robot_blocks_idle_stand_{false};
 
     static constexpr int kMotionStopTimeoutMs_ = 2000;
     static constexpr int kPoseCommandDedupMs_ = 3000;

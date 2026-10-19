@@ -6,7 +6,7 @@ MotionHandle::MotionHandle(ros::NodeHandle& nh)
 {
     motion_cmd_pub_ = nh.advertise<std_msgs::String>("/motion_cmd", 10);
     robot_state_sub_ = nh.subscribe(
-        "/robot_state", 10, &MotionHandle::robot_state_callback, this);
+        "/m20_v06/robot_state", 10, &MotionHandle::robot_state_callback, this);
     running_.store(true, std::memory_order_release);
     watchdog_thread_ = std::thread(&MotionHandle::watchdog_loop, this);
 }
@@ -26,7 +26,10 @@ void MotionHandle::publish_motion_cmd(
         {"source", "navigation"},
         {"target_mode", target_mode},
         {"ttl_sec", 1.0},
-        {"twist", {{"x", lin_x}, {"y", lin_y}, {"z", ang_z}}}
+        {"twist", {
+            {"linear", {{"x", lin_x}, {"y", lin_y}, {"z", 0.0}}},
+            {"angular", {{"x", 0.0}, {"y", 0.0}, {"z", ang_z}}}
+        }}
     };
 
     std_msgs::String msg;
@@ -34,13 +37,15 @@ void MotionHandle::publish_motion_cmd(
     motion_cmd_pub_.publish(msg);
 }
 
-void MotionHandle::robot_state_callback(const std_msgs::String::ConstPtr& msg)
+void MotionHandle::robot_state_callback(
+    const robot_gateway::M20V06RobotState::ConstPtr& msg)
 {
     if (!msg) {
         return;
     }
 
-    robot_is_lie_down_.store(msg->data == "lie_down", std::memory_order_release);
+    robot_blocks_idle_stand_.store(
+        msg->mode_id == 1 || msg->mode_id == 2, std::memory_order_release);
     robot_state_received_.store(true, std::memory_order_release);
 }
 
@@ -64,7 +69,7 @@ void MotionHandle::watchdog_loop()
 
             const bool can_publish_idle_stand =
                 robot_state_received_.load(std::memory_order_acquire) &&
-                !robot_is_lie_down_.load(std::memory_order_acquire);
+                !robot_blocks_idle_stand_.load(std::memory_order_acquire);
             if (!motion_publish_active_ && can_publish_idle_stand &&
                 now - last_idle_stand_time_ >= kStandPublishInterval) {
                 last_idle_stand_time_ = now;

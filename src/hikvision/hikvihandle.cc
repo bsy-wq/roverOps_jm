@@ -711,3 +711,8 @@ HikvisionHandle::Result HikvisionHandle::hikvision_controller(
     result.azimuth = target.azimuth;
     return result;
 }
+
+// void HikvisionHandle::handle_get_picture() {
+//     std::string cmd = 
+//         "curl --digest -u admin:yuanqi456 'http://192.168.55.64/ISAPI/Streaming/channels/1/picture' -o "
+// }

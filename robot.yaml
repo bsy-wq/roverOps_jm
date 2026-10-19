@@ -1,10 +1,11 @@
 app:
   name: "robot_dog"
   environment: "ceshi"
-  version: "1.0.0"
+  version: "M20.01.02.20260923 B"
 
 robot:
   sn: "M20-P1-bsy"
+  model: "M20"
 
 network:
   http:

@@ -31,6 +31,7 @@ public:
     Result continuous_controller(const std::string& command);
     json handle_command(const json& data);
     json handle_continuous_command(const json& data);
+    void handle_get_picture();
 
 private:
     struct HttpResponse {

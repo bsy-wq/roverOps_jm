@@ -1,0 +1,38 @@
+app:
+  name: "robot_dog"
+  environment: "ceshi"
+  version: "M20.01.02.20260923 B"
+
+robot:
+  sn: "M20-P1-bsy"
+  model: "M20" # M20 / A10
+
+network:
+  http:
+    ip: "112.2.6.99"
+    port: 8503
+
+  gateway:
+    host: "0.0.0.0" # websocket 修改ip
+    port: 8080
+    protocol: "ws"
+
+  endpoints:
+    register: "/robot/ws/robotDog"
+    navbridge: "/default"
+
+udp:
+  port: 19001
+
+websocket:
+  ip: "0.0.0.0"
+  port: 9002
+  server_equipment: "/robot/ws/superstructure/equirpment"
+  server_test: "/robot/ws/bsy"
+
+parameter:
+  xml_path: "/home/jianmi/grebotMap_jm/advanced_param.xml"
+  yaml_path: "/home/jianmi/grebotMap_jm/params.yaml"
+
+light:
+  low_battery_percent: 20 # 最低报警电量

@@ -7,6 +7,8 @@
 #include <websocketpp/config/asio.hpp>
 
 #include <atomic>
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <iostream>
@@ -18,6 +20,9 @@
 #include <vector>
 
 #include <robot_gateway/M20BmsState.h>
+#ifdef HAVE_A10_BMS
+#include <bms_ros_bridge/BmsStatus.h>
+#endif
 
 namespace {
 
@@ -271,25 +276,49 @@ json bms_state_to_json(const robot_gateway::M20BmsState& msg,
 
 class BmsForwarder::Impl {
 public:
+    std::function<void(bool, double)> battery_callback_;
     Impl(ros::NodeHandle& nh, std::string websocket_url,
-         std::string robot_id, std::string bms_topic)
+         std::string robot_id, std::string bms_topic, std::string robot_model)
         : nh_(nh),
           websocket_url_(std::move(websocket_url)),
           robot_id_(std::move(robot_id)),
-          bms_topic_(bms_topic.empty() ? "/m20/bms_state" : std::move(bms_topic)) {}
+          bms_topic_(bms_topic.empty() ? "/m20/bms_state" : std::move(bms_topic)),
+          robot_model_(std::move(robot_model)) {
+        std::transform(robot_model_.begin(), robot_model_.end(), robot_model_.begin(),
+                       [](unsigned char c) { return std::toupper(c); });
+        if (robot_model_ == "A10") bms_topic_ = "/bms_status";
+    }
 
     ~Impl() {
         stop();
     }
 
     bool start() {
+        if (robot_model_ != "M20" && robot_model_ != "A10") {
+            ROS_ERROR_STREAM("[BMS ROS] Unsupported robot.model: " << robot_model_);
+            return false;
+        }
+#ifndef HAVE_A10_BMS
+        if (robot_model_ == "A10") {
+            ROS_ERROR("[BMS ROS] A10 requires bms_ros_bridge/BmsStatus.h; source its workspace and reconfigure/rebuild");
+            return false;
+        }
+#endif
         bool expected = false;
         if (!running_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
             return true;
         }
 
-        bms_subscriber_ = nh_.subscribe(
-            bms_topic_, 10, &Impl::on_bms_state, this);
+#ifdef HAVE_A10_BMS
+        if (robot_model_ == "A10") {
+            bms_subscriber_ = nh_.subscribe(bms_topic_, 10, &Impl::on_a10_bms_state, this);
+        } else
+#endif
+        {
+            bms_subscriber_ = nh_.subscribe(
+                bms_topic_, 10, &Impl::on_bms_state, this);
+        }
+        ROS_INFO_STREAM("[BMS ROS] model=" << robot_model_ << " topic=" << bms_topic_);
 
         ws_client_.init_asio();
         ws_client_.clear_access_channels(websocketpp::log::alevel::all);
@@ -333,6 +362,46 @@ public:
     }
 
 private:
+#ifdef HAVE_A10_BMS
+    template <typename Battery>
+    static json a10_battery_to_json(const Battery& battery) {
+        json flags = json::array();
+        for (const auto flag : battery.alarm_flags) flags.push_back(bool(flag));
+        return {{"voltage_v", battery.voltage_v}, {"current_a", battery.current_a},
+                {"temperature_c", battery.temperature_c}, {"soc_percent", int(battery.soc_percent)},
+                {"cycle_count", battery.cycle_count}, {"soh_percent", int(battery.soh_percent)},
+                {"active_alarm_count", battery.active_alarm_count}, {"bat_state", int(battery.bat_state)},
+                {"chg_detect", int(battery.chg_detect)}, {"charge_mode", int(battery.charge_mode)},
+                {"alarm_flags", flags}};
+    }
+
+    void on_a10_bms_state(const bms_ros_bridge::BmsStatus::ConstPtr& msg) {
+        if (!msg) return;
+        const bool present1 = msg->bat01.voltage_v > 0;
+        const bool present2 = msg->bat02.voltage_v > 0;
+        double soc = 0;
+        if (present1 && present2) soc = std::min(double(msg->bat01.soc_percent), double(msg->bat02.soc_percent));
+        else if (present1) soc = msg->bat01.soc_percent;
+        else if (present2) soc = msg->bat02.soc_percent;
+        const bool fault = msg->bat01.active_alarm_count > 0 || msg->bat02.active_alarm_count > 0;
+        {
+            std::lock_guard<std::mutex> lock(bms_mutex_);
+            latest_soc_ = soc;
+            has_bms_state_ = true;
+        }
+        if (battery_callback_) battery_callback_(fault || (!present1 && !present2), soc);
+        const json battery = {
+            {"type", "battery_status"}, {"timestamp", unix_timestamp_ms()},
+            {"robot_id", robot_id_}, {"model", "A10"}, {"source_topic", bms_topic_},
+            {"soc_percent", soc}, {"bat01", a10_battery_to_json(msg->bat01)},
+            {"bat02", a10_battery_to_json(msg->bat02)}, {"current_peri", msg->current_peri},
+            {"current_leg1", msg->current_leg1}, {"current_leg2", msg->current_leg2},
+            {"current_leg3", msg->current_leg3}, {"current_leg4", msg->current_leg4},
+            {"source_timestamp", msg->timestamp}, {"charge_result", int(msg->charge_result)}};
+        queue_websocket_payload(battery.dump());
+    }
+#endif
+
     void on_bms_state(const robot_gateway::M20BmsState::ConstPtr& msg) {
         if (!msg) {
             return;
@@ -340,12 +409,18 @@ private:
 
         {
             std::lock_guard<std::mutex> lock(bms_mutex_);
-            latest_bms_state_ = *msg;
+            latest_soc_ = msg->soc_percent;
             has_bms_state_ = true;
         }
 
-        const std::string payload =
-            bms_state_to_json(*msg, robot_id_, bms_topic_).dump();
+        const json battery = bms_state_to_json(*msg, robot_id_, bms_topic_);
+        bool fault = msg->precharge_mos_fault || !battery["active_flags"].empty();
+        for (const auto& alarm : battery["active_alarm_levels"]) {
+            // SOC low is handled by the configurable battery threshold.
+            if (alarm["key"] != "soc_low_level") fault = true;
+        }
+        if (battery_callback_) battery_callback_(fault, msg->soc_percent);
+        const std::string payload = battery.dump();
         // std::cout << "[BMS ROS] update topic=" << bms_topic_
         //           << " voltage_v=" << msg->voltage_v
         //           << " current_a=" << msg->current_a
@@ -463,13 +538,13 @@ private:
             return;
         }
 
-        robot_gateway::M20BmsState bms_state;
+        double soc = 0;
         {
             std::lock_guard<std::mutex> lock(bms_mutex_);
             if (!has_bms_state_) {
                 return;
             }
-            bms_state = latest_bms_state_;
+            soc = latest_soc_;
         }
 
         const json robot_status = {
@@ -484,7 +559,7 @@ private:
             {"total_travel_distance", 0.0},
             {"localize_status", 0},
             {"relocalize_status", 0},
-            {"battery_level", static_cast<int>(bms_state.soc_percent)},
+            {"battery_level", static_cast<int>(soc)},
             {"obd_status", 255},
             {"linear_velocity", {{"x", 0.0}, {"y", 0.0}, {"z", 0.0}}},
             {"angular_velocity", {{"x", 0.0}, {"y", 0.0}, {"z", 0.0}}},
@@ -548,10 +623,11 @@ private:
     std::string websocket_url_;
     std::string robot_id_;
     std::string bms_topic_;
+    std::string robot_model_;
 
     ros::Subscriber bms_subscriber_;
     std::mutex bms_mutex_;
-    robot_gateway::M20BmsState latest_bms_state_;
+    double latest_soc_ = 0;
     bool has_bms_state_ = false;
 
     std::atomic_bool running_{false};
@@ -570,10 +646,10 @@ private:
 };
 
 BmsForwarder::BmsForwarder(ros::NodeHandle& nh, std::string websocket_url,
-                           std::string robot_id, std::string bms_topic)
+                           std::string robot_id, std::string bms_topic, std::string robot_model)
     : impl_(std::make_unique<Impl>(
           nh, std::move(websocket_url), std::move(robot_id),
-          std::move(bms_topic))) {}
+          std::move(bms_topic), std::move(robot_model))) {}
 
 BmsForwarder::~BmsForwarder() = default;
 
@@ -583,4 +659,8 @@ bool BmsForwarder::start() {
 
 void BmsForwarder::stop() {
     impl_->stop();
+}
+
+void BmsForwarder::setBatteryCallback(std::function<void(bool, double)> callback) {
+    impl_->battery_callback_ = std::move(callback);
 }

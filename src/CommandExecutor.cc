@@ -48,7 +48,6 @@ CommandExecutor::CommandExecutor(ros::NodeHandle& nh,
       bms_topic_(bms_model && bms_model[0] != '\0' ? bms_model : "/m20/bms_state"),
       scripts_path_(scripts_path),
       map_dir_(map_dir),
-      action_timeout_sec_(300),
       map_files_(map_files),
       doc_(doc),
       parameter_path_(parameter_path),
@@ -114,6 +113,25 @@ CommandExecutor::CommandExecutor(ros::NodeHandle& nh,
     );
 
     motion_handle_ = std::make_unique<MotionHandle>(nh_);
+
+    broadcast_handle_ = std::make_unique<Broadcast>(
+        device_id_,
+        http_ip_, 
+        http_port_,
+        [this](const std::string& message) {
+            send_to_cloud(message);
+        }
+    );
+
+    std::string follow_base_url;
+    nh_.param<std::string>("follow_base_url", follow_base_url, "http://127.0.0.1:8088");
+    follow_ = std::make_unique<Follow>(
+        device_id_,
+        [this](const std::string& message) {
+            send_to_cloud(message);
+        },
+        follow_base_url
+    );
 
     std::string hikvision_ip = "192.168.44.64";
     std::string hikvision_username = "admin";
@@ -558,6 +576,12 @@ void CommandExecutor::finish_command(const std::string& cmd_type) {
         return;
     }
 
+    std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+    if (cmd_type == "start_navigation" &&
+        behavior_fsm_.snapshot().motion_mode == MotionMode::StartingNavigation) {
+        behavior_fsm_.navigation_ready(false, "Navigation startup failed");
+        publish_fsm_state(cmd_type, "failed");
+    }
     std::lock_guard<std::mutex> lock(command_state_mutex_);
     if (active_command_ == cmd_type) {
         LOG_INFO("[CommandState] finish command={}", cmd_type);
@@ -568,7 +592,6 @@ void CommandExecutor::finish_command(const std::string& cmd_type) {
 }
 
 void CommandExecutor::execute(const json& payload_json) {
-    // ROS_INFO("    ======================= (handle_cloud_command) =======================    ");
     std::string cmd_type;
     try {
         json data = payload_json.is_string()
@@ -608,192 +631,8 @@ void CommandExecutor::execute(const json& payload_json) {
         
         LOG_INFO("[Command] received type={}, target_device={}, payload={}", cmd_type, target_device, data.dump());
         
-        if (!try_begin_command(cmd_type)) {
-            return;
-        }
+        robot_bt(cmd_type, data);
 
-        if (cmd_type == "initial_pose") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            handle_initial_pose(data);
-        } else if (cmd_type == "start_navigation") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            handle_start_navigation(data);
-        } else if (cmd_type == "navigation_task") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            handle_navigation_task(data);
-        } else if (cmd_type == "set_dock_pose") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            handle_set_dock_pose(data);
-        } else if (cmd_type == "action_control" || cmd_type == "control") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            if (motion_handle_) {
-                motion_handle_->handle_action_control(data);
-            }
-            LOG_INFO("{}", cmd_type);
-        } else if (cmd_type == "set_position_upload_frequency") {
-            handle_set_position_upload_frequency(data);
-        } else if (cmd_type == "stop_navigation") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            handle_stop_navigation(data);
-            finish_command(cmd_type);
-        } else if (cmd_type == "start_mapping") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            handle_start_mapping(data);
-            finish_command(cmd_type);
-        } else if (cmd_type == "stop_and_uploadmap") {
-            json stop_test = {
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            };
-            send_to_cloud(stop_test.dump());
-            LOG_INFO("{}", cmd_type);
-            handle_stop_and_uploadmap(data);
-        } else if (cmd_type == "nav-upload-successful") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            handle_start_sh(data);
-            finish_command(cmd_type);
-        } else if (cmd_type == "start_task") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            exec_rosservice_cmd("start_task", "/start_task");           
-        } else if (cmd_type == "pause_task" || cmd_type == "resume_task") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            enqueue_task_state_request(cmd_type, cmd_type == "pause_task");
-        } else if (cmd_type == "clear_waypoints") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            unsigned long long clear_attempt_id = 0;
-            {
-                std::lock_guard<std::mutex> lock(clear_waypoints_mutex_);
-                clear_waypoints_pending_ = true;
-                clear_attempt_id = ++clear_waypoints_attempt_id_;
-            }
-            launch_background_task(std::thread([this, clear_attempt_id]() {
-                std::this_thread::sleep_for(std::chrono::seconds(kClearWaypointsAckTimeoutSec_));
-                complete_clear_waypoints_result(
-                    clear_attempt_id,
-                    false,
-                    "Timeout waiting for clear waypoints confirmation");
-            }));
-            exec_rosservice_cmd("clear_waypoints", "/clear_waypoints");           
-        } else if (cmd_type == "cancel_task") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            exec_rosservice_cmd("cancel_task", "/cancel_task");           
-        } else if (cmd_type == "start_recharge") { // 开始回充
-           send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            exec_rosservice_cmd("start_recharge", "/start_recharge");  
-        } else if (cmd_type == "stop_recharge") { // 结束回充
-           send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            exec_rosservice_cmd("stop_recharge", "/stop_recharge");  
-        } else if (cmd_type == "upload_require_file") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            LOG_INFO("{}", cmd_type);
-            exec_upload_cmd(cmd_type);
-        } else if (cmd_type == "hikvision_continuous") {
-            if (hikvision_handle_ == nullptr) {
-                send_to_cloud(json{
-                    {"type", cmd_type},
-                    {"status", "failed"},
-                    {"error_message", "海康云台模块未初始化"}
-                }.dump());
-            } else {
-                send_to_cloud(
-                    hikvision_handle_->handle_continuous_command(data).dump());
-            }
-        } else if (cmd_type == "hikvision") {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"localTime", getTimeNow()},
-                {"status", "received"}
-            }.dump());
-            if (hikvision_handle_ == nullptr) {
-                send_to_cloud(json{
-                    {"type", cmd_type},
-                    {"error_message", "海康云台模块未初始化"}
-                }.dump());
-            } else {
-                send_to_cloud(hikvision_handle_->handle_command(data).dump());
-            }
-        } else if (cmd_type == "set_param") {
-            modify_handle_.updateParam(data);
-        } else if (cmd_type == "bsy_test") {
-            std::vector<std::string> bsy_file = {"666.pcd"};
-            std::string bsy_file_path = "/home/jianmi/yq";
-            std::string end_path = "yq/000";
-            map_manager_->upload_map_sh(device_id_, "yq", "000", bsy_file_path, bsy_file, end_path, "6335d16b-ec5b-4183-99b7-36c075baeaa8");
-        }
     } catch (const std::exception& e) {
         ROS_ERROR("Command parsing error: %s", e.what());
 
@@ -802,11 +641,353 @@ void CommandExecutor::execute(const json& payload_json) {
         } catch (...) {}
 
         LOG_ERROR("[Command] parsing error: {}", e.what());
-        if (cmd_type == "start_navigation" && robot_state_handle_) {
+        std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+        if (cmd_type == "start_navigation" && robot_state_handle_ &&
+            behavior_fsm_.snapshot().motion_mode == MotionMode::StartingNavigation) {
             robot_state_handle_->clear_navigation_environment();
         }
         finish_command(cmd_type);
     }
+}
+
+void CommandExecutor::robot_bt(std::string cmd_type, json data) {
+    if (cmd_type == "get_fsm_state") {
+        publish_fsm_state(cmd_type, "success");
+        return;
+    }
+    if (cmd_type == "start_follow" || cmd_type == "stop_follow") {
+        handle_follow_command(cmd_type, data);
+        return;
+    }
+    const bool behavior_command = is_managed_command(cmd_type) ||
+        cmd_type == "pause_task" || cmd_type == "resume_task" ||
+        cmd_type == "start_recharge" || cmd_type == "stop_recharge" ||
+        cmd_type == "set_dock_pose";
+    std::unique_lock<std::recursive_mutex> behavior_lock(behavior_execution_mutex_, std::defer_lock);
+    if (cmd_type == "stop_navigation") {
+        if (!behavior_fsm_.begin_stop()) {
+            publish_fsm_state(cmd_type, "rejected", "Current behavior cannot be stopped by stop_navigation");
+            return;
+        }
+        behavior_lock.lock();
+        invalidate_navigation_requests();
+        const bool stopped = handle_stop_navigation(data);
+        behavior_fsm_.stopped(stopped, stopped ? "" : "Navigation cleanup failed");
+        publish_fsm_state(cmd_type, stopped ? "success" : "failed");
+        return;
+    }
+    if (behavior_command) {
+        behavior_lock.lock();
+        if (!admit_behavior_command(cmd_type)) return;
+    }
+    if (!try_begin_command(cmd_type)) return;
+    if (cmd_type == "start_navigation" && !behavior_fsm_.begin_navigation()) {
+        finish_command(cmd_type);
+        publish_fsm_state(cmd_type, "rejected", "Navigation cannot start in current state");
+        return;
+    }
+    if (cmd_type == "start_mapping" && !behavior_fsm_.begin_mapping()) {
+        finish_command(cmd_type);
+        publish_fsm_state(cmd_type, "rejected", "Mapping cannot start in current state");
+        return;
+    }
+
+    if (cmd_type == "initial_pose") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        handle_initial_pose(data);
+    } else if (cmd_type == "start_navigation") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        handle_start_navigation(data);
+    } else if (cmd_type == "navigation_task") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        handle_navigation_task(data);
+    } else if (cmd_type == "set_dock_pose") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        handle_set_dock_pose(data);
+    } else if (cmd_type == "action_control" || cmd_type == "control") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        if (motion_handle_) {
+            motion_handle_->handle_action_control(data);
+        }
+        LOG_INFO("{}", cmd_type);
+    } else if (cmd_type == "set_position_upload_frequency") {
+        handle_set_position_upload_frequency(data);
+    } else if (cmd_type == "stop_navigation") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        (void)handle_stop_navigation(data);
+        finish_command(cmd_type);
+    } else if (cmd_type == "start_mapping") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        handle_start_mapping(data);
+        {
+            std::lock_guard<std::mutex> lock(process_mutex_);
+            behavior_fsm_.mapping(mapping_process_ > 0);
+        }
+        finish_command(cmd_type);
+    } else if (cmd_type == "stop_and_uploadmap") {
+        json stop_test = {
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        };
+        send_to_cloud(stop_test.dump());
+        LOG_INFO("{}", cmd_type);
+        handle_stop_and_uploadmap(data);
+    } else if (cmd_type == "nav-upload-successful") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        handle_start_sh(data);
+        finish_command(cmd_type);
+    } else if (cmd_type == "start_task") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        exec_rosservice_cmd("start_task", "/start_task");           
+    } else if (cmd_type == "pause_task" || cmd_type == "resume_task") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        enqueue_task_state_request(cmd_type, cmd_type == "pause_task");
+    } else if (cmd_type == "clear_waypoints") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        unsigned long long clear_attempt_id = 0;
+        {
+            std::lock_guard<std::mutex> lock(clear_waypoints_mutex_);
+            clear_waypoints_pending_ = true;
+            clear_attempt_id = ++clear_waypoints_attempt_id_;
+        }
+        launch_background_task(std::thread([this, clear_attempt_id]() {
+            std::this_thread::sleep_for(std::chrono::seconds(kClearWaypointsAckTimeoutSec_));
+            complete_clear_waypoints_result(
+                clear_attempt_id,
+                false,
+                "Timeout waiting for clear waypoints confirmation");
+        }));
+        exec_rosservice_cmd("clear_waypoints", "/clear_waypoints");           
+    } else if (cmd_type == "cancel_task") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        exec_rosservice_cmd("cancel_task", "/cancel_task");           
+    } else if (cmd_type == "start_recharge") { // 开始回充
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        exec_rosservice_cmd("start_recharge", "/start_recharge");  
+    } else if (cmd_type == "stop_recharge") { // 结束回充
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        exec_rosservice_cmd("stop_recharge", "/stop_recharge");  
+    } else if (cmd_type == "upload_require_file") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        LOG_INFO("{}", cmd_type);
+        exec_upload_cmd(cmd_type);
+    } else if (cmd_type == "hikvision_continuous") {
+        if (hikvision_handle_ == nullptr) {
+            send_to_cloud(json{
+                {"type", cmd_type},
+                {"status", "failed"},
+                {"error_message", "海康云台模块未初始化"}
+            }.dump());
+        } else {
+            send_to_cloud(
+                hikvision_handle_->handle_continuous_command(data).dump());
+        }
+    } else if (cmd_type == "hikvision") {
+        send_to_cloud(json{
+            {"type", cmd_type},
+            {"localTime", getTimeNow()},
+            {"status", "received"}
+        }.dump());
+        if (hikvision_handle_ == nullptr) {
+            send_to_cloud(json{
+                {"type", cmd_type},
+                {"error_message", "海康云台模块未初始化"}
+            }.dump());
+        } else {
+            send_to_cloud(hikvision_handle_->handle_command(data).dump());
+        }
+    } else if (cmd_type == "set_param") {
+        modify_handle_.updateParam(data);
+    } else if (cmd_type == "bsy_test") {
+        std::vector<std::string> bsy_file = {"666.pcd"};
+        std::string bsy_file_path = "/home/jianmi/yq";
+        std::string end_path = "yq/000";
+        map_manager_->upload_map_sh(device_id_, "yq", "000", bsy_file_path, bsy_file, end_path, "6335d16b-ec5b-4183-99b7-36c075baeaa8");
+    } else if (cmd_type == "upload_broatcast") {
+        broadcast_handle_->download_broadcast("trailer.mp4", http_ip_, http_port_);
+    } else if (cmd_type == "follow") {
+        follow_->handle_follow_function(data);
+    }
+}
+
+void CommandExecutor::publish_fsm_state(const std::string& command, const std::string& status,
+                                       const std::string& message) {
+    const auto state = behavior_fsm_.snapshot();
+    send_to_cloud(json{{"type", "fsm_state"}, {"command", command}, {"status", status},
+        {"device_id", device_id_}, {"motion_mode", RobotFsm::name(state.motion_mode)},
+        {"task_status", RobotFsm::task_name(state.task_status)},
+        {"health", state.health == HealthStatus::Healthy ? "Healthy" :
+                   state.health == HealthStatus::UnHealthy ? "UnHealthy" : "Unknown"},
+        {"generation", state.generation}, {"navigation_environment_ready", state.navigation_environment_ready},
+        {"localization_ready", state.localization_ready}, {"follow_placeholder", state.follow_placeholder},
+        {"fault_reason", state.fault_reason}, {"message", message}, {"localTime", getTimeNow()}}.dump());
+    LOG_INFO("[FSM] command={}, status={}, state={}, generation={}, message={}",
+             command, status, RobotFsm::name(state.motion_mode), state.generation, message);
+}
+
+bool CommandExecutor::admit_behavior_command(const std::string& type) {
+    const auto state = behavior_fsm_.snapshot();
+    bool allowed = false;
+    if (type == "start_navigation" || type == "start_mapping") {
+        allowed = state.motion_mode == MotionMode::Idle;
+    } else if (type == "stop_and_uploadmap" || type == "nav-upload-successful") {
+        allowed = state.motion_mode == MotionMode::Mapping;
+    } else {
+        allowed = RobotFsm::is_navigation(state.motion_mode);
+        if (type != "stop_recharge" && type != "cancel_task") {
+            allowed = allowed && state.navigation_environment_ready;
+        }
+        if (type == "start_task" || type == "start_recharge") {
+            allowed = allowed && state.localization_ready;
+        }
+    }
+    if (!allowed) publish_fsm_state(type, "rejected", "Command is not allowed in current behavior state");
+    return allowed;
+}
+
+void CommandExecutor::invalidate_navigation_requests() {
+    {
+        std::lock_guard<std::mutex> lock(command_state_mutex_);
+        active_command_.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(navigation_env_mutex_);
+        navigation_env_pending_ = false;
+        ++navigation_env_attempt_id_;
+    }
+    {
+        std::lock_guard<std::mutex> lock(initial_pose_mutex_);
+        initial_pose_pending_ = false;
+        ++initial_pose_attempt_id_;
+    }
+    {
+        std::lock_guard<std::mutex> lock(navigation_task_mutex_);
+        navigation_task_pending_ = false;
+        ++navigation_task_attempt_id_;
+    }
+    {
+        std::lock_guard<std::mutex> lock(clear_waypoints_mutex_);
+        clear_waypoints_pending_ = false;
+        ++clear_waypoints_attempt_id_;
+    }
+    {
+        std::lock_guard<std::mutex> lock(task_state_mutex_);
+        task_state_requests_.clear();
+        task_state_transition_active_ = false;
+        task_state_worker_running_ = false;
+        task_paused_ = false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(task_execution_progress_mutex_);
+        task_execution_active_ = false;
+    }
+}
+
+void CommandExecutor::handle_follow_command(const std::string& type, const json& data) {
+    if (type == "stop_follow") {
+        std::lock_guard<std::recursive_mutex> lock(behavior_execution_mutex_);
+        const bool stopped = behavior_fsm_.stop_follow();
+        if (stopped) LOG_INFO("[Follow] stop placeholder; no device command sent");
+        publish_fsm_state(type, stopped ? "success" : "rejected", "Follow backend is a placeholder");
+        return;
+    }
+    const auto decision = behavior_fsm_.begin_follow();
+    if (decision == RobotFsm::FollowDecision::Rejected) {
+        publish_fsm_state(type, "rejected", "Follow cannot preempt current behavior");
+        return;
+    }
+    if (decision == RobotFsm::FollowDecision::AlreadyFollowing) {
+        publish_fsm_state(type, "placeholder", "Follow placeholder already active");
+        return;
+    }
+    publish_fsm_state(type, "received", "Stopping navigation before follow placeholder");
+    std::lock_guard<std::recursive_mutex> lock(behavior_execution_mutex_);
+    invalidate_navigation_requests();
+    // Check for an environment that may have been started outside this process too.
+    std::string running_reason;
+    const bool stopped = !is_navigation_environment_running(running_reason) || handle_stop_navigation(data);
+    behavior_fsm_.stopped(stopped, stopped ? "" : "Navigation cleanup failed", true);
+    if (!stopped) {
+        publish_fsm_state(type, "failed", "Follow was not started because navigation did not stop");
+        return;
+    }
+    LOG_INFO("[Follow] start_follow placeholder; navigation stopped, backend not implemented");
+    behavior_fsm_.follow_started();
+    publish_fsm_state(type, "placeholder", "Follow backend is not implemented; no device command sent");
 }
 
 bool CommandExecutor::get_robot_position(double& x, double& y, double& z)
@@ -1077,6 +1258,8 @@ void CommandExecutor::localization_callback(const nav_msgs::Odometry::ConstPtr& 
 }
 
 void CommandExecutor::initial_pose_rosout_callback(const rosgraph_msgs::Log::ConstPtr& msg) {
+    std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+    if (!RobotFsm::is_navigation(behavior_fsm_.snapshot().motion_mode)) return;
     if (!msg) {
         return;
     }
@@ -1151,9 +1334,11 @@ void CommandExecutor::initial_pose_rosout_callback(const rosgraph_msgs::Log::Con
         }
         send_navigation_task_state(
             "task_paused", "paused", "任务已暂停", rosout_message);
+        behavior_fsm_.task_state(TaskStatus::Paused);
         return;
     }
     if (rosout_message.find("检测到从暂停中恢复") != std::string::npos) {
+        behavior_fsm_.task_state(TaskStatus::Running);
         {
             std::lock_guard<std::mutex> lock(task_state_mutex_);
             task_paused_ = false;
@@ -1199,9 +1384,18 @@ void CommandExecutor::initial_pose_rosout_callback(const rosgraph_msgs::Log::Con
 
         size_t reached_points = 0;
         size_t total_points = 0;
+        std::string task_id;
+        std::string task_uuid;
+        std::string task_map_id;
         {
             std::lock_guard<std::mutex> lock(task_execution_progress_mutex_);
+            if (static_cast<size_t>(waypoint_index) <= task_execution_reached_points_) {
+                return;
+            }
             total_points = task_execution_total_points_;
+            task_id = get_task_id_;
+            task_uuid = task_uuid_;
+            task_map_id = task_map_id_;
             reached_points = static_cast<size_t>(waypoint_index);
             if (total_points > 0) {
                 reached_points = std::min(reached_points, total_points);
@@ -1224,7 +1418,10 @@ void CommandExecutor::initial_pose_rosout_callback(const rosgraph_msgs::Log::Con
             {"waypoint_index", waypoint_index},
             {"status", "reached"},
             {"localTime", getTimeNow()},
-            {"message", rosout_message}
+            {"message", rosout_message},
+            {"task_id", task_id.empty() ? json(nullptr) : json(task_id)},
+            {"uuid", task_uuid.empty() ? json(nullptr) : json(task_uuid)},
+            {"map_id", task_map_id.empty() ? json(nullptr) : json(task_map_id)}
         };
         if (total_points > 0) {
             const std::string progress = fmt::format("{}/{}", reached_points, total_points);
@@ -1233,9 +1430,11 @@ void CommandExecutor::initial_pose_rosout_callback(const rosgraph_msgs::Log::Con
             waypoint_msg["progress"] = progress;
             waypoint_msg["progress_message"] = fmt::format("导航任务点已经完成了 {}", progress);
         }
-        send_to_cloud(waypoint_msg.dump());
-        LOG_INFO("[NavigationWaypoint] reached index={}, progress={}/{}, message={}",
-                 waypoint_index, reached_points, total_points, rosout_message);
+        const std::string waypoint_payload = waypoint_msg.dump();
+        ROS_INFO("[NavigationWaypoint] sending websocket for index %lld", waypoint_index);
+        send_to_cloud(waypoint_payload);
+        LOG_INFO("[NavigationWaypoint] reached index={}, progress={}/{}",
+                 waypoint_index, reached_points, total_points);
         return;
     }
 
@@ -1462,6 +1661,8 @@ void CommandExecutor::send_navigation_planning_failure() {
 }
 
 void CommandExecutor::complete_initial_pose_result(unsigned long long attempt_id, bool success, const std::string& message) {
+    std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+    if (!RobotFsm::is_navigation(behavior_fsm_.snapshot().motion_mode)) return;
     {
         std::lock_guard<std::mutex> lock(initial_pose_mutex_);
         if (!initial_pose_pending_ || attempt_id != initial_pose_attempt_id_) {
@@ -1472,6 +1673,8 @@ void CommandExecutor::complete_initial_pose_result(unsigned long long attempt_id
 
     upload_enable_.store(success, std::memory_order_release);
     localization_ready_.store(success, std::memory_order_release);
+    behavior_fsm_.localization_ready(success);
+    publish_fsm_state("initial_pose", success ? "success" : "failed", message);
 
     json result_msg = {
         {"type", "ack_initial_pose"},
@@ -1495,6 +1698,7 @@ void CommandExecutor::complete_initial_pose_result(unsigned long long attempt_id
 }
 
 void CommandExecutor::complete_navigation_env_ready(unsigned long long attempt_id, bool success, const std::string& message) {
+    std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
     {
         std::lock_guard<std::mutex> lock(navigation_env_mutex_);
         if (!navigation_env_pending_ || attempt_id != navigation_env_attempt_id_) {
@@ -1502,6 +1706,10 @@ void CommandExecutor::complete_navigation_env_ready(unsigned long long attempt_i
         }
         navigation_env_pending_ = false;
     }
+
+    if (!RobotFsm::is_navigation(behavior_fsm_.snapshot().motion_mode)) return;
+    behavior_fsm_.navigation_ready(success, message);
+    publish_fsm_state("start_navigation", success ? "ready" : "failed", message);
 
     navigation_env_ready_.store(success, std::memory_order_release);
     localization_ready_.store(false, std::memory_order_release);
@@ -1536,6 +1744,8 @@ void CommandExecutor::complete_navigation_env_ready(unsigned long long attempt_i
 }
 
 void CommandExecutor::complete_navigation_task_result(unsigned long long attempt_id, bool success, const std::string& message) {
+    std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+    if (!RobotFsm::is_navigation(behavior_fsm_.snapshot().motion_mode)) return;
     size_t confirmed = 0;
     size_t expected = 0;
     {
@@ -1574,6 +1784,8 @@ void CommandExecutor::complete_navigation_task_result(unsigned long long attempt
 }
 
 void CommandExecutor::complete_clear_waypoints_result(unsigned long long attempt_id, bool success, const std::string& message) {
+    std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+    if (!RobotFsm::is_navigation(behavior_fsm_.snapshot().motion_mode)) return;
     {
         std::lock_guard<std::mutex> lock(clear_waypoints_mutex_);
         if (!clear_waypoints_pending_ || attempt_id != clear_waypoints_attempt_id_) {
@@ -1700,6 +1912,7 @@ void CommandExecutor::handle_initial_pose(const json& data)
 
 // 2、开启导航 (环境初始化)
 void CommandExecutor::handle_start_navigation(const json& data) {
+    const auto generation = behavior_fsm_.snapshot().generation;
 
     std::string running_reason;
     if (is_navigation_environment_running(running_reason)) {
@@ -1725,6 +1938,7 @@ void CommandExecutor::handle_start_navigation(const json& data) {
         robot_state_handle_->update_navigation_environment(false, address, display_name);
     }
     std::string uuid = get_uuid(address, display_name, http_ip_, http_port_);
+    if (!behavior_fsm_.navigation_current(generation)) return;
     std::cout << "uuid_old: " << uuid_old << " ----> " << "uuid_new: " << uuid << std::endl; 
     if (uuid.empty()) {
         json msg = {
@@ -1816,12 +2030,16 @@ void CommandExecutor::handle_start_navigation(const json& data) {
             this,
             data,
             uuid_old,
-            uuid
+            uuid,
+            generation
         )
     );
 }
 
-void CommandExecutor::start_navigation_async(json data, std::string uuid_old, std::string uuid) {
+void CommandExecutor::start_navigation_async(json data, std::string uuid_old, std::string uuid,
+                                              unsigned long long generation) {
+    try {
+    if (!behavior_fsm_.navigation_current(generation)) return;
     std::string address = data.value("address", "");
     std::string display_name = data.value("display_name", "");
     LOG_INFO("[NavigationEnv] async prepare map begin, address={}, display_name={}, map_dir={}",
@@ -1850,6 +2068,9 @@ void CommandExecutor::start_navigation_async(json data, std::string uuid_old, st
     }
 
     std::cout << "map download result: " << (success ? 1 : 0) << std::endl;
+
+    std::unique_lock<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+    if (!behavior_fsm_.navigation_current(generation)) return;
 
     if (!success) {
         ROS_ERROR("Map deployment failed for %s. Navigation aborted.", display_name.c_str());
@@ -1957,11 +2178,11 @@ void CommandExecutor::start_navigation_async(json data, std::string uuid_old, st
             "Timeout waiting for Tomogram exported");
     }));
 
+    behavior_lock.unlock();
     sleep(5);
+    behavior_lock.lock();
+    if (!behavior_fsm_.navigation_current(generation)) return;
 
-    navigation_env_ready_.store(false, std::memory_order_release);
-    localization_ready_.store(false, std::memory_order_release);
-    upload_enable_.store(false, std::memory_order_release);
     ROS_INFO("Navigation environment started. Waiting for tomogram export before initial_pose.");
     LOG_INFO("[NavigationEnv] environment started, waiting for Tomogram exported, attempt_id={}", nav_env_attempt_id);
     log_runtime_flags("start_navigation_started");
@@ -1977,17 +2198,39 @@ void CommandExecutor::start_navigation_async(json data, std::string uuid_old, st
     send_to_cloud(msg3.dump());
     std::cout << "开启导航环境以全部准备就绪... " << std::endl;
     LOG_INFO("开始路径上报: {}", msg3.dump());
+    } catch (const std::exception& e) {
+        std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+        if (!behavior_fsm_.navigation_current(generation)) return;
+        LOG_ERROR("[NavigationEnv] startup exception: {}", e.what());
+        behavior_fsm_.navigation_ready(false, e.what());
+        finish_command("start_navigation");
+        publish_fsm_state("start_navigation", "failed", e.what());
+    }
 }
 
 void CommandExecutor::handle_navigation_task(const json& data) {
     std::cout << "start handle_navigation_task... " << std::endl;
-    pct_planner::MultiWaypointNavigationGoal goal;
+    size_t published_waypoint_count = 0;
 
     const json &points = data.value("target_points", json::array());
     if (points.empty())
     {
         ROS_WARN("[CommandExecutor] navigation_task 没有有效目标点，取消发送");
+        finish_command("navigation_task");
         return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(task_execution_progress_mutex_);
+        task_execution_reached_points_ = 0;
+        task_execution_total_points_ = points.size();
+        task_execution_active_ = true;
+        get_task_id_ = data.contains("task_id") && data["task_id"].is_string()
+            ? data["task_id"].get<std::string>() : "";
+        task_uuid_ = data.contains("uuid") && data["uuid"].is_string()
+            ? data["uuid"].get<std::string>() : "";
+        task_map_id_ = data.contains("map_id") && data["map_id"].is_string()
+            ? data["map_id"].get<std::string>() : "";
     }
 
     unsigned long long nav_task_attempt_id = 0;
@@ -2034,10 +2277,10 @@ void CommandExecutor::handle_navigation_task(const json& data) {
 
         goal_pub_.publish(target);
 
-        goal.waypoints.push_back(target);
+        ++published_waypoint_count;
     }
 
-    if (goal.waypoints.empty())
+    if (published_waypoint_count == 0)
     {
         ROS_WARN("[CommandExecutor] navigation_task 没有有效目标点，取消发送");
         complete_navigation_task_result(nav_task_attempt_id, false, "No valid target points");
@@ -2135,7 +2378,7 @@ void CommandExecutor::handle_set_dock_pose(const json& data) {
     LOG_INFO("[DockPose] published payload={}", ack.dump());
 }
 
-void CommandExecutor::handle_stop_navigation(const json& data) {
+bool CommandExecutor::handle_stop_navigation(const json& data) {
     ROS_INFO("    ======================= 停止导航 (handle_stop_navigation) =======================    ");
     LOG_INFO(" 停止导航 (handle_stop_navigation) ... ");
     LOG_INFO("[StopNavigation] begin, payload={}", data.dump());
@@ -2153,7 +2396,17 @@ void CommandExecutor::handle_stop_navigation(const json& data) {
         LOG_INFO("[StopNavigation] send SIGINT to navigation.sh process group, pid={}", nav_pid);
         kill(-nav_pid, SIGINT);
         int status = 0;
-        waitpid(nav_pid, &status, 0);
+        for (int attempt = 0; attempt < 30; ++attempt) {
+            if (waitpid(nav_pid, &status, WNOHANG) != 0) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        if (kill(nav_pid, 0) == 0) {
+            kill(-nav_pid, SIGKILL);
+            for (int attempt = 0; attempt < 10; ++attempt) {
+                if (waitpid(nav_pid, &status, WNOHANG) != 0) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
         log_wait_status("navigation.sh", status);
         std::lock_guard<std::mutex> lock(process_mutex_);
         if (nav_process_ == nav_pid) {
@@ -2165,7 +2418,17 @@ void CommandExecutor::handle_stop_navigation(const json& data) {
         LOG_INFO("[StopNavigation] send SIGINT to nav_to_goal.sh process group, pid={}", goal_pid);
         kill(-goal_pid, SIGINT);
         int status = 0;
-        waitpid(goal_pid, &status, 0);
+        for (int attempt = 0; attempt < 30; ++attempt) {
+            if (waitpid(goal_pid, &status, WNOHANG) != 0) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        if (kill(goal_pid, 0) == 0) {
+            kill(-goal_pid, SIGKILL);
+            for (int attempt = 0; attempt < 10; ++attempt) {
+                if (waitpid(goal_pid, &status, WNOHANG) != 0) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
         log_wait_status("nav_to_goal.sh", status);
         std::lock_guard<std::mutex> lock(process_mutex_);
         if (goal_process_ == goal_pid) {
@@ -2239,18 +2502,28 @@ void CommandExecutor::handle_stop_navigation(const json& data) {
         current_map_id = current_map_id_;
     }
 
+    navigation_env_ready_.store(false, std::memory_order_release);
+    localization_ready_.store(false, std::memory_order_release);
+    upload_enable_.store(false, std::memory_order_release);
+    std::string remaining_reason;
+    const bool stopped = !is_navigation_environment_running(remaining_reason) &&
+                         !(nav_pid > 0 && kill(nav_pid, 0) == 0) &&
+                         !(goal_pid > 0 && kill(goal_pid, 0) == 0);
     json msg3 = {
         {"type", "ack_stop_navigation"},
         {"timestamp", (int)time(nullptr)},
         {"localTime", getTimeNow()},
         {"device_id", device_id_},
-        {"code", 0},
+        {"code", stopped ? 0 : 1},
+        {"status", stopped ? "success" : "failed"},
+        {"message", stopped ? "Navigation stopped" : remaining_reason},
         {"map_id", current_map_id}
     };
     send_to_cloud(msg3.dump());
     LOG_INFO("开始路径上报: {}", msg3.dump());
 
-    ROS_INFO("Navigation stopped and cleaned.");
+    if (stopped) ROS_INFO("Navigation stopped and cleaned.");
+    else ROS_WARN("Navigation cleanup incomplete: %s", remaining_reason.c_str());
     navigation_env_ready_.store(false, std::memory_order_release);
     localization_ready_.store(false, std::memory_order_release);
     upload_enable_.store(false, std::memory_order_release);
@@ -2258,6 +2531,7 @@ void CommandExecutor::handle_stop_navigation(const json& data) {
         robot_state_handle_->clear_navigation_environment();
     }
     log_runtime_flags("stop_navigation_done");
+    return stopped;
 }
 
 void CommandExecutor::handle_start_mapping(const json& data) {
@@ -2375,6 +2649,8 @@ void CommandExecutor::handle_start_sh(const json& data)
         {"code", 0},
         {"message", "建图流程已结束, 可以进行导航操作... "}
     }.dump());
+    behavior_fsm_.mapping(false);
+    publish_fsm_state("nav-upload-successful", "success");
 
 }
 
@@ -2433,33 +2709,7 @@ void CommandExecutor::set_current_map_id(const std::string& id) {
 }
 
 std::string CommandExecutor::get_state_name() const {
-    if (localization_ready_.load(std::memory_order_acquire)) {
-        return "LocalizationReady";
-    }
-    if (navigation_env_ready_.load(std::memory_order_acquire)) {
-        return "WaitingInitialPose";
-    }
-    return "Idle";
-}
-
-void CommandExecutor::doneCb(const actionlib::SimpleClientGoalState &state,
-                             const pct_planner::MultiWaypointNavigationResultConstPtr &result)
-{
-    if (state == actionlib::SimpleClientGoalState::SUCCEEDED)
-    {
-        ROS_INFO("Action Succeeded!");
-    }
-    else
-    {
-        ROS_WARN("Action Finished in State [%s]", state.toString().c_str());
-    }
-
-    ROS_INFO("Result Message: %s", result->message.c_str());
-}
-
-void CommandExecutor::feedbackCb(const pct_planner::MultiWaypointNavigationFeedbackConstPtr &feedback)
-{
-    ROS_INFO("Distance to current goal: %.2f", feedback->distance_to_current_goal);
+    return RobotFsm::name(behavior_fsm_.snapshot().motion_mode);
 }
 
 void CommandExecutor::enqueue_task_state_request(
@@ -2528,6 +2778,8 @@ void CommandExecutor::process_next_task_state_request() {
 }
 
 void CommandExecutor::complete_task_state_transition(bool success, int ret) {
+    std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+    if (!RobotFsm::is_navigation(behavior_fsm_.snapshot().motion_mode)) return;
     TaskStateRequest completed_request;
     bool current_paused = false;
     {
@@ -2561,30 +2813,27 @@ void CommandExecutor::complete_task_state_transition(bool success, int ret) {
              current_paused ? "paused" : "running", ret);
 
     finish_command("pause_or_resume_task");
+    if (success) behavior_fsm_.task_state(current_paused ? TaskStatus::Paused : TaskStatus::Running);
     process_next_task_state_request();
 }
 
 // 新增四个功能： 开启任务、 暂停/继续任务、 清除打点、 结束任务、 开始回充、 结束回充
 void CommandExecutor::exec_rosservice_cmd(const std::string& type, const std::string& service_name) {
-    std::string final_cmd;
-    if (type == "pause_or_resume_task") {
-        final_cmd = fmt::format("rosservice call {}", service_name);
-    } else {
-        final_cmd = fmt::format(
-            R"(gnome-terminal -- bash -c "
-                rosservice call {} ;
-                echo 'Terminal will close in 10 seconds...';
-                sleep 10
-            ")", service_name
-        );
-    }
+    const auto generation = behavior_fsm_.snapshot().generation;
+    // Wait for the service invocation itself, with a bound on cancellation latency.
+    const std::string final_cmd = "timeout 10s rosservice call " + shell_quote(service_name);
 
     ROS_INFO("Execute CMD:");
     ROS_INFO("%s", final_cmd.c_str());
 
-    std::thread([this, final_cmd, type, service_name]() {
+    launch_background_task(std::thread([this, final_cmd, type, service_name, generation]() {
+
+        std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+        if (!behavior_fsm_.navigation_current(generation)) return;
 
         int ret = std::system(final_cmd.c_str());
+
+        if (!behavior_fsm_.navigation_current(generation)) return;
 
         bool success = WIFEXITED(ret) && (WEXITSTATUS(ret) == 0);
 
@@ -2614,6 +2863,12 @@ void CommandExecutor::exec_rosservice_cmd(const std::string& type, const std::st
 
         ROS_INFO("[%s] return: %d", type.c_str(), ret);
         finish_command(type);
+        if (success && (type == "start_task" || type == "start_recharge")) {
+            behavior_fsm_.task_state(TaskStatus::Running);
+        } else if (success && (type == "cancel_task" || type == "stop_recharge")) {
+            behavior_fsm_.task_state(TaskStatus::Cancelled);
+        }
+        publish_fsm_state(type, success ? "success" : "failed");
 
-    }).detach();
+    }));
 }

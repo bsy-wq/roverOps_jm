@@ -8,6 +8,9 @@
 #include "json.hpp"
 #include <ctime>
 #include <iomanip>
+#include <memory>
+#include <array>
+#include <cstdio>
 
 using json = nlohmann::json;
 
@@ -123,8 +126,10 @@ inline std::string get_uuid(const std::string& address, const std::string& displ
 
 inline static long long unix_timestamp_ms()
 {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
+    // return std::chrono::duration_cast<std::chrono::milliseconds>(
+    //     std::chrono::system_clock::now().time_since_epoch()).count();
+
+    return std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 }
 
 inline static bool parse_completed_task_round(const std::string& message, int& round)
@@ -180,4 +185,28 @@ inline std::string getTimeNow() {
     std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &local_time);
 
     return buffer;
+}
+
+inline std::string get_serial_number() {
+    std::string cmd =
+        "sshpass -p '666' ssh "
+        "-o StrictHostKeyChecking=no "
+        "-o ConnectTimeout=5 "
+        "jianmi@192.168.44.102 "
+        "'cat /etc/serial-number'";
+
+    std::array<char, 256> buffer{};
+    std::string result;
+
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) {
+        return "";
+    }
+
+    while (fgets(buffer.data(), buffer.size(), pipe)) {
+        result += buffer.data();
+    }
+
+    pclose(pipe);
+    return trim_copy(result);
 }

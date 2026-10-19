@@ -1,11 +1,12 @@
 #include "gateway.h"
+#include <vector>
 
 
 gateway::gateway()
     : private_nh_("~")
 {
     update_state(GatewayState::Disconnected, "constructor");
-    private_nh_.param<int>("local_port", port, 9001);
+    private_nh_.param<int>("local_port", port, 9002);
     private_nh_.param<int>("ping_second", pingSecond, 2);
     private_nh_.param<int>("pong_timeout", pongTimeOut, 5);
     private_nh_.param<int>("command_timeout_ms", command_timeout_ms_, 60000);
@@ -50,7 +51,10 @@ gateway::~gateway()
     stopping_.store(true, std::memory_order_release);
     update_state(GatewayState::Stopping, "destructor");
     ROS_INFO("[Gateway] 正在关闭系统...");
-    ws_server.stop_listening();
+    if (ws_server.is_listening()) {
+        websocketpp::lib::error_code ec;
+        ws_server.stop_listening(ec);
+    }
 
     ws_server.stop();
     ws_client.stop();
@@ -512,10 +516,10 @@ bool gateway::send_to_web_now(const std::string& payload)
         LOG_INFO("[Client] task_round_completed websocket send 成功, bytes={}, payload={}",
                  payload.size(), payload);
     }
-    if (is_nav_bridge_robot_status) {
-        LOG_INFO("[Client] nav_bridge robot_status websocket send 成功, bytes={}, payload={}",
-                 payload.size(), payload);
-    }
+    // if (is_nav_bridge_robot_status) {
+    //     LOG_INFO("[Client] nav_bridge robot_status websocket send 成功, bytes={}, payload={}",
+    //              payload.size(), payload);
+    // }
     return true;
 }
 
@@ -548,7 +552,6 @@ void gateway::schedule_heartbeat(int generation)
                 std::chrono::system_clock::now().time_since_epoch()).count();
             const json heartbeat = {
                 {"type", "nav_bridge_ping"},
-                // {"type", "ping"},
                 {"device_id", device_id_},
                 {"timestamp", timestamp_ms}
             };
@@ -738,10 +741,10 @@ void gateway::on_pong(connection_hdl hdl, std::string payload)
         long long sent_ms = std::stoll(payload);
         auto latency = now_ms - sent_ms;
 
-        if (latency > 1000)
-        {
-            ROS_WARN("[Client] 网络延迟较高: %lld ms", latency);
-        }
+        // if (latency > 1000)
+        // {
+        //     ROS_WARN("[Client] 网络延迟较高: %lld ms", latency);
+        // }
     }
     catch (...)
     {
@@ -756,7 +759,7 @@ void gateway::on_pong_timeout(connection_hdl hdl, std::string payload)
         return;
     }
 
-    ROS_ERROR("[Client] WebSocket Pong 超时 %d ms，主动断开并重连, payload=%s",
+    ROS_ERROR("[Client] WebSocket Pong 超时 %d ms, 主动断开并重连, payload=%s",
               pongTimeOut * 1000,
               payload.c_str());
     mark_web_disconnected("websocket pong timeout", true);
@@ -764,37 +767,83 @@ void gateway::on_pong_timeout(connection_hdl hdl, std::string payload)
 
 bool gateway::is_duplicate_command(const json& payload_json)
 {
-    std::string id;
-    for (const char* key : {"command_id", "cmd_id", "request_id", "msg_id"}) {
-        if (payload_json.contains(key)) {
-            if (payload_json[key].is_string()) {
-                id = payload_json[key].get<std::string>();
-            } else if (payload_json[key].is_number_integer()) {
-                id = std::to_string(payload_json[key].get<long long>());
+    std::string dedup_key;
+    const std::string type = payload_json.value("type", "");
+
+    if (type == "broadcast" || type == "roboticarm" || type == "ai_recognition") {
+        // 广播消息必须同时具备三个字段
+        if (!payload_json.contains("seq") ||
+            !payload_json["seq"].is_number_integer() ||
+            !payload_json.contains("device_id") ||
+            !payload_json["device_id"].is_string() ||
+            !payload_json.contains("id") ||
+            !payload_json["id"].is_string()) {
+            ROS_WARN("[Gateway] 广播消息缺少有效的 seq、device_id 或 id");
+            return false;
+        }
+
+        const auto seq = payload_json["seq"].get<long long>();
+        const auto device_id = payload_json["device_id"].get<std::string>();
+        const auto id = payload_json["id"].get<std::string>();
+
+        if (device_id.empty() || id.empty()) {
+            ROS_WARN("[Gateway] 广播消息 device_id 或 id 为空");
+            return false;
+        }
+
+        // 三个字段共同构成去重键
+        dedup_key = json::array({type, device_id, seq, id}).dump();
+    } else {
+        // 普通命令：兼容原有的命令 ID 字段
+        const std::vector<const char*> keys = {
+            "command_id", "cmd_id", "request_id", "msg_id"
+        };
+
+        for (const char* key : keys) {
+            if (!payload_json.contains(key)) {
+                continue;
             }
-            if (!id.empty()) {
-                id = payload_json.value("type", "") + ":" + id;
+
+            const auto& value = payload_json[key];
+            std::string value_str;
+
+            if (value.is_string()) {
+                value_str = value.get<std::string>();
+            } else if (value.is_number_integer()) {
+                value_str = value.dump();
+            } else {
+                continue;
+            }
+
+            if (!value_str.empty()) {
+                dedup_key = type + ":" + key + ":" + value_str;
                 break;
             }
         }
     }
 
-    if (id.empty()) {
+    // 没有可用的去重键，不进行去重
+    if (dedup_key.empty()) {
         return false;
     }
 
     std::lock_guard<std::mutex> lock(dedup_mutex_);
-    if (recent_command_id_set_.find(id) != recent_command_id_set_.end()) {
-        ROS_WARN("[Gateway] 重复命令已忽略: %s", id.c_str());
+
+    if (recent_command_id_set_.find(dedup_key) !=
+        recent_command_id_set_.end()) {
+        ROS_WARN("[Gateway] 重复命令已忽略: %s",
+                 dedup_key.c_str());
         return true;
     }
 
-    recent_command_ids_.push_back(id);
-    recent_command_id_set_.insert(id);
+    recent_command_ids_.push_back(dedup_key);
+    recent_command_id_set_.insert(dedup_key);
+
     while (recent_command_ids_.size() > kRecentCommandCacheLimit_) {
         recent_command_id_set_.erase(recent_command_ids_.front());
         recent_command_ids_.pop_front();
     }
+
     return false;
 }
 
@@ -850,7 +899,9 @@ void gateway::on_message(connection_hdl hdl, server::message_ptr msg)
     }
 
     // 过滤非 JSON 数据
-    char c = payload[0];
+    const auto first = payload.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return;
+    char c = payload[first];
 
     bool maybe_json =
         c == '{' ||
@@ -886,7 +937,35 @@ void gateway::on_message(connection_hdl hdl, server::message_ptr msg)
         return;
     }
 
+    if (!payload_json.is_object()) return;
+    const auto type = payload_json.find("type");
+    if (type != payload_json.end() && !type->is_string()) return;
     const std::string payload_type = payload_json.value("type", "");
+    // 喊话器、 机械臂、 AI识别 web端收到消息进行转发
+    if ((payload_type == "broadcast" || payload_type == "roboticarm" ||
+         payload_type == "ai_recognition") && is_same_hdl(hdl, hdl_webserver)) {
+        const auto target = payload_json.find("device_id");
+        if (device_id_.empty() || target == payload_json.end() ||
+            !target->is_string() || target->get_ref<const std::string&>() != device_id_) {
+            return;
+        }
+        if (is_duplicate_command(payload_json)) return;
+        std::function<void(const std::string&)> cb;
+        {
+            std::lock_guard<std::mutex> lock(callback_mutex_);
+            cb = broadcast_callback_;
+        }
+        if (cb) {
+            try {
+                cb(payload);
+            } catch (const std::exception& e) {
+                ROS_ERROR("[Gateway] broadcast callback failed: %s", e.what());
+            } catch (...) {
+                ROS_ERROR("[Gateway] broadcast callback failed");
+            }
+        }
+        return;
+    }
     // if (payload_type == "nav_bridge_ping" || payload_type == "heartbeat") {
     //     return;
     // }
@@ -995,6 +1074,12 @@ void gateway::setMessageCallback(MessageCallback cb)
 {
     std::lock_guard<std::mutex> lock(callback_mutex_);
     message_callback_ = std::move(cb);
+}
+
+void gateway::setBroadcastCallback(std::function<void(const std::string&)> cb)
+{
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    broadcast_callback_ = std::move(cb);
 }
 
 void gateway::setConnectedCallback(std::function<void()> cb)

@@ -2,6 +2,7 @@
 
 #include "../include/common/json.hpp"
 #include "../include/common/utils.h"
+#include "RobotFsm.h"
 #include <atomic>
 #include <chrono>
 #include <deque>
@@ -24,8 +25,6 @@
 #include <std_msgs/Int8.h>
 #include <std_msgs/String.h>
 #include <tf/transform_listener.h>
-#include <pct_planner/MultiWaypointNavigationAction.h>
-#include <actionlib/client/simple_action_client.h>
 #include <tf/transform_datatypes.h>
 #include <curl/curl.h>
 #include "mapping/maphandle.h"
@@ -33,6 +32,8 @@
 #include "robotState/robotState.h"
 #include "modifyValue/modifyHandle.h"
 #include "motionControl/motionHandle.h"
+#include "broadcast/broadcastHandle.h"
+#include "follow/followHandle.h"
 
 using json = nlohmann::json;
 
@@ -54,6 +55,7 @@ public:
 
     void ros_prepare(const json& payload_json);
     void execute(const json& payload_json);
+    void robot_bt(std::string cmd_type, json data);
     void send_to_cloud(const std::string& msg);
     void try_flush_msgs();
     void setGateway(gateway* gw);
@@ -62,11 +64,12 @@ public:
     void handle_start_navigation(const json& data);
     void handle_navigation_task(const json& data);
     void handle_set_dock_pose(const json& data);
-    void handle_stop_navigation(const json& data);
+    bool handle_stop_navigation(const json& data);
     void handle_start_mapping(const json& data);
     void handle_stop_and_uploadmap(const json& data);
     void handle_start_sh(const json& data);
-    void start_navigation_async(json data, std::string uuid_old, std::string uuid_new);
+    void start_navigation_async(json data, std::string uuid_old, std::string uuid_new,
+                                unsigned long long generation);
     void stop_and_uploadmap_async(json data);
     std::string get_last_storage_path() const;
     void set_upload_enable(bool enable);
@@ -74,14 +77,11 @@ public:
     std::string get_current_map_id() const;
     void set_current_map_id(const std::string& id);
     std::string get_state_name() const;
+    RobotDto get_behavior_state() const { return behavior_fsm_.snapshot(); }
     void loc_callback(const std_msgs::Int8::ConstPtr& msg);
     bool get_robot_position(double& x, double& y, double& z);
     bool get_robot_orientation(double& roll, double& pitch, double& yaw);
     void exec_upload_cmd(const json& data);
-
-    void doneCb(const actionlib::SimpleClientGoalState &state,
-                const pct_planner::MultiWaypointNavigationResultConstPtr &result);
-    void feedbackCb(const pct_planner::MultiWaypointNavigationFeedbackConstPtr &feedback);
 
     void start_add_task();
     void start_add_point();
@@ -123,6 +123,13 @@ public:
     }
 
 private:
+    bool admit_behavior_command(const std::string& type);
+    void handle_follow_command(const std::string& type, const json& data);
+    void publish_fsm_state(const std::string& command, const std::string& status,
+                           const std::string& message = "");
+    void invalidate_navigation_requests();
+    RobotFsm behavior_fsm_;
+    std::recursive_mutex behavior_execution_mutex_;
     void init_ros_publishers();
     void init_ros_subscribers();
     void global_path_callback(const nav_msgs::Path::ConstPtr& msg);
@@ -167,6 +174,7 @@ private:
     std::string parameter_yaml_path_;
     std::unique_ptr<MapManager> map_manager_;
     std::unique_ptr<HikvisionHandle> hikvision_handle_;
+    std::unique_ptr<Follow> follow_;
     ModifyHandle modify_handle_;
     std::unique_ptr<MotionHandle> motion_handle_;
 
@@ -199,6 +207,7 @@ private:
     pid_t cleanup_process_ = -1;
 
     std::unique_ptr<robotState> robot_state_handle_;
+    std::unique_ptr<Broadcast> broadcast_handle_;
 
     mutable std::mutex process_mutex_;
     std::unique_ptr<MappingHandle> mapping_handle_;
@@ -255,6 +264,18 @@ private:
     bool task_state_transition_active_ = false;
     bool task_paused_ = false;
     TaskStateRequest active_task_state_request_{"", false};
-    pct_planner::MultiWaypointNavigationGoal current_goal_;
-    int action_timeout_sec_;
+
+    std::string get_task_id_;
+    std::string task_uuid_;
+    std::string task_map_id_;
+};
+
+
+enum class CommandCategory {
+    Navigation,
+    Follow,
+    Mapping,
+    Payload,
+    Control,
+    Other
 };
