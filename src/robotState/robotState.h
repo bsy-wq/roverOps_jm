@@ -6,7 +6,7 @@
 #include <ros/ros.h>
 
 #include "common/json.hpp"
-#include <robot_gateway/M20BmsState.h>
+#include "bms/BatteryProvider.h"
 #include <std_msgs/String.h>
 
 class robotState {
@@ -23,7 +23,7 @@ public:
     ~robotState();
 
     void read_ros_state_info_callback(const std_msgs::String::ConstPtr& msg);
-    void read_ros_bms_info_callback(const robot_gateway::M20BmsState::ConstPtr& msg);
+    void updateBattery(const BatterySnapshot& snapshot);
     void update_navigation_environment(
         bool active,
         const std::string& address,

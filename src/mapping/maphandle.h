@@ -23,13 +23,13 @@ public:
     using LogRuntimeFlags = std::function<void(const char*)>;
     using LogWaitStatus = std::function<void(const std::string&, int)>;
     using FinishCommand = std::function<void(const std::string&)>;
+    using MappingResult = std::function<void(bool, const std::string&)>;
+    using ShutdownRequested = std::function<bool()>;
 
     MappingHandle(std::string device_id,
                   std::string scripts_path,
                   std::string map_dir,
                   std::vector<std::string> map_files,
-                  pid_t& mapping_process,
-                  std::mutex& process_mutex,
                   MapManager* map_manager,
                   SendToCloud send_to_cloud,
                   LogFileAccess log_file_access,
@@ -37,18 +37,22 @@ public:
                   ShellQuote shell_quote,
                   LogRuntimeFlags log_runtime_flags,
                   LogWaitStatus log_wait_status,
-                  FinishCommand finish_command);
+                  FinishCommand finish_command,
+                  MappingResult mapping_result,
+                  ShutdownRequested shutdown_requested);
 
     void handle_start_mapping(const json& data);
     void stop_and_uploadmap_async(json data);
+    bool is_running() const;
+    pid_t current_pid() const;
 
 private:
     std::string device_id_;
     std::string scripts_path_;
     std::string map_dir_;
     std::vector<std::string> map_files_;
-    pid_t& mapping_process_;
-    std::mutex& process_mutex_;
+    pid_t mapping_process_ = -1;
+    mutable std::mutex process_mutex_;
     MapManager* map_manager_ = nullptr;
     SendToCloud send_to_cloud_;
     LogFileAccess log_file_access_;
@@ -57,4 +61,6 @@ private:
     LogRuntimeFlags log_runtime_flags_;
     LogWaitStatus log_wait_status_;
     FinishCommand finish_command_;
+    MappingResult mapping_result_;
+    ShutdownRequested shutdown_requested_;
 };

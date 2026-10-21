@@ -17,13 +17,18 @@ using json = nlohmann::json;
 
 class MotionHandle {
 public:
-    explicit MotionHandle(ros::NodeHandle& nh);
+    MotionHandle(ros::NodeHandle& nh, const std::string& motion_control_version);
     ~MotionHandle();
 
     MotionHandle(const MotionHandle&) = delete;
     MotionHandle& operator=(const MotionHandle&) = delete;
 
     void handle_action_control(const json& data);
+
+    // True for an explicit stop/emergency_stop, or a velocity frame whose
+    // linear and angular velocities are both zero. Safety stops bypass the
+    // behavior-state gate.
+    static bool is_stop_or_estop(const json& data);
 
 private:
     void publish_motion_cmd(const std::string& target_mode,
@@ -33,6 +38,7 @@ private:
 
     ros::Publisher motion_cmd_pub_;
     ros::Subscriber robot_state_sub_;
+    bool use_new_motion_control_ = true;
     std::atomic<bool> running_{false};
     std::thread watchdog_thread_;
     std::mutex motion_mutex_;

@@ -1,5 +1,8 @@
+set(USER_HOME "$ENV{HOME}")
+
 add_library(bms
     BmsForwarder.cc
+    BatteryProvider.cc
 )
 
 find_path(A10_BMS_INCLUDE_DIR bms_ros_bridge/BmsStatus.h
@@ -14,6 +17,7 @@ endif()
 
 target_include_directories(bms
     PUBLIC
+        "${USER_HOME}/lhh_workspace/catkin_ws/devel/include"
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 

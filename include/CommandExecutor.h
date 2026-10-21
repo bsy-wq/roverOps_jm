@@ -3,9 +3,11 @@
 #include "../include/common/json.hpp"
 #include "../include/common/utils.h"
 #include "RobotFsm.h"
+#include "handlers/HandlerRegistry.h"
 #include <atomic>
 #include <chrono>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -37,10 +39,11 @@
 
 using json = nlohmann::json;
 
-#define MAP_MANAGER_LOCAL "/home/jianmi/map_manager_local/"
-
 class gateway;
 class MapManager;
+class NavigationLifecycleHandler;
+class MapWorkflowHandler;
+class DeviceHandler;
 
 class CommandExecutor {
 public:
@@ -48,14 +51,18 @@ public:
     CommandExecutor(ros::NodeHandle& nh,
                     const std::string& device_id, const std::string& http_ip,
                     const int& http_port,
+                    const std::string& motion_control_version,
                     const std::string& scripts_path, const std::string& map_dir,
                     const std::vector<std::string>& map_files, const char* bms_model,
                     tinyxml2::XMLDocument& doc, const std::string& parameter_path, const std::string& parameter_yaml_path);
     ~CommandExecutor();
 
+    void updateBattery(const BatterySnapshot& snapshot) {
+        if (robot_state_handle_) robot_state_handle_->updateBattery(snapshot);
+    }
     void ros_prepare(const json& payload_json);
     void execute(const json& payload_json);
-    void robot_bt(std::string cmd_type, json data);
+    void robot_bt(const std::string& cmd_type, const json& data);
     void send_to_cloud(const std::string& msg);
     void try_flush_msgs();
     void setGateway(gateway* gw);
@@ -78,10 +85,28 @@ public:
     void set_current_map_id(const std::string& id);
     std::string get_state_name() const;
     RobotDto get_behavior_state() const { return behavior_fsm_.snapshot(); }
+    bool is_http_follow_running() const { return follow_ && follow_->is_running(); }
+    bool is_http_follow_estopped() const { return follow_ && follow_->is_estopped(); }
     void loc_callback(const std_msgs::Int8::ConstPtr& msg);
     bool get_robot_position(double& x, double& y, double& z);
     bool get_robot_orientation(double& roll, double& pitch, double& yaw);
     void exec_upload_cmd(const json& data);
+
+    // Narrow command API used by the routing handlers. Keeping these public
+    // avoids friend access to locks, device pointers and internal flags.
+    void report_command_received(const std::string& cmd_type);
+    void handle_clear_waypoints_request();
+    void handle_task_state_request(const std::string& cmd_type);
+    void handle_start_mapping_command(const json& data);
+    void handle_nav_upload_successful_command(const json& data);
+    void start_mapping_processing_timeout();
+    void handle_bsy_test_command();
+    void handle_action_control_command(const std::string& cmd_type, const json& data);
+    void handle_hikvision_command(const std::string& cmd_type, const json& data);
+    void handle_set_param_command(const json& data);
+    void handle_broadcast_command(const json& data);
+    void handle_set_position_upload_frequency(const json& data);
+    void handle_follow_backend_command(const json& data);
 
     void start_add_task();
     void start_add_point();
@@ -123,8 +148,17 @@ public:
     }
 
 private:
+    void register_command_handlers();
     bool admit_behavior_command(const std::string& type);
-    void handle_follow_command(const std::string& type, const json& data);
+    std::string behavior_rejection_message(const std::string& type, MotionMode mode) const;
+    bool admit_web_motion_command(const std::string& cmd_type, const json& data,
+                                  std::unique_lock<std::recursive_mutex>& behavior_lock);
+    void handle_follow_command(const std::string& type, const json& data,
+                               bool start_backend = false);
+    void handle_follow_stop_command(const std::string& cmd_type, const json& data);
+    void queue_pending_follow_request(const json& data, bool start_backend);
+    void clear_pending_follow_request();
+    void process_pending_follow_request();
     void publish_fsm_state(const std::string& command, const std::string& status,
                            const std::string& message = "");
     void invalidate_navigation_requests();
@@ -148,11 +182,14 @@ private:
     void process_next_task_state_request();
     void complete_task_state_transition(bool success, int ret);
     void telemetry_loop();
-    void handle_set_position_upload_frequency(const json& data);
     bool should_send_upload_position();
     bool is_pid_still_running(pid_t pid) const;
     bool is_navigation_environment_running(std::string& reason);
-    void launch_background_task(std::thread&& worker);
+    void launch_background_task(std::function<void()> task,
+                                std::function<void(const std::string&)> on_error = {});
+    void reap_finished_workers();
+    void send_background_error(const std::string& message);
+    bool sleep_for_or_shutdown(std::chrono::milliseconds duration);
     void log_runtime_flags(const char* stage) const;
     void log_wait_status(const std::string& name, int status) const;
     bool log_file_access(const std::string& name, const std::string& path, int mode) const;
@@ -178,6 +215,11 @@ private:
     ModifyHandle modify_handle_;
     std::unique_ptr<MotionHandle> motion_handle_;
 
+    std::unique_ptr<NavigationLifecycleHandler> navigation_lifecycle_handler_;
+    std::unique_ptr<MapWorkflowHandler> map_workflow_handler_;
+    std::unique_ptr<DeviceHandler> device_handler_;
+    command::HandlerRegistry handlers_;
+
     ros::Publisher initial_pose_pub_;
     ros::Publisher loops_pub_;
     ros::Publisher goals_pub_;
@@ -189,10 +231,13 @@ private:
     ros::Publisher neupanPathPub;
 
     ros::Subscriber loc_sub_;
+    std::mutex round_pose_mutex_;
+    nav_msgs::Odometry::ConstPtr latest_round_localization_;
+    std::chrono::steady_clock::time_point latest_round_localization_time_{};
+    int last_relocalized_round_ = 0;
     ros::Subscriber global_path_sub_;
     ros::Subscriber rosout_sub_;
     ros::Subscriber robot_state_;
-    ros::Subscriber bms_info_;
 
     tf::TransformListener tf_listener_;
 
@@ -203,7 +248,6 @@ private:
     std::string current_map_id_ = "map_001";
     pid_t nav_process_ = -1;
     pid_t goal_process_ = -1;
-    pid_t mapping_process_ = -1;
     pid_t cleanup_process_ = -1;
 
     std::unique_ptr<robotState> robot_state_handle_;
@@ -219,8 +263,15 @@ private:
     std::mutex navigation_env_mutex_;
     std::mutex navigation_task_mutex_;
     std::mutex clear_waypoints_mutex_;
+    std::mutex mapping_processing_mutex_;
+    unsigned long long mapping_processing_attempt_id_ = 0;
     std::mutex navigation_planning_failure_mutex_;
-    std::vector<std::thread> background_workers_;
+    struct BackgroundWorker {
+        std::thread thread;
+        std::shared_ptr<std::atomic<bool>> done;
+    };
+    std::vector<BackgroundWorker> background_workers_;
+    std::atomic<bool> shutting_down_{false};
     std::thread telemetry_thread_;
     std::mutex msg_mutex_;
     std::deque<std::string> pending_msgs_;
@@ -234,6 +285,7 @@ private:
     static constexpr int kNavigationEnvReadyTimeoutSec_ = 120;
     static constexpr int kNavigationTaskAckTimeoutSec_ = 10;
     static constexpr int kClearWaypointsAckTimeoutSec_ = 10;
+    static constexpr int kMappingProcessingTimeoutSec_ = 300;
     bool initial_pose_pending_ = false;
     unsigned long long initial_pose_attempt_id_ = 0;
     bool navigation_env_pending_ = false;
@@ -264,6 +316,18 @@ private:
     bool task_state_transition_active_ = false;
     bool task_paused_ = false;
     TaskStateRequest active_task_state_request_{"", false};
+
+    // A follow request that arrived while stopping. Guarded by
+    // follow_pending_mutex_; processing_pending_follow_ is only touched while
+    // holding behavior_execution_mutex_.
+    struct PendingFollowRequest {
+        json data;
+        bool start_backend = false;
+    };
+    std::mutex follow_pending_mutex_;
+    PendingFollowRequest pending_follow_request_;
+    bool has_pending_follow_request_ = false;
+    bool processing_pending_follow_ = false;
 
     std::string get_task_id_;
     std::string task_uuid_;

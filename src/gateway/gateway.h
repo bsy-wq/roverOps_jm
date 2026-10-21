@@ -18,6 +18,7 @@
 #include <deque>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 #include "../include/common/json.hpp"
 #include "../include/common/log_manager.h"
 
@@ -43,6 +44,8 @@ public:
 
     gateway();
     ~gateway();
+    // Call from the owning thread before destroying callback targets.
+    void stop();
 
     bool setup(const std::string &web_url);
 
@@ -79,6 +82,9 @@ private:
     std::thread::id client_thread_id;
     std::thread server_thread;
     std::unique_ptr<work_guard_t> client_work;
+    std::mutex stop_mutex_;
+    std::mutex worker_mutex_;
+    std::vector<std::future<void>> workers_;
 
     std::string webURL;
     std::string heartbeatURL;
@@ -145,4 +151,5 @@ private:
 
     bool start_server(uint16_t port);
     bool start_client(const std::string &URL);
+    void start_background_task(std::function<void()> task);
 };

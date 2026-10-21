@@ -83,9 +83,48 @@ CMakeFiles/robot_dog.dir/src/CommandExecutor.cc.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/robot_dog.dir/src/CommandExecutor.cc.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/jianmi/grebotMap_jm/src/CommandExecutor.cc -o CMakeFiles/robot_dog.dir/src/CommandExecutor.cc.s
 
+CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.o: CMakeFiles/robot_dog.dir/flags.make
+CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.o: ../src/handlers/NavigationLifecycleHandler.cc
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.o"
+	/usr/bin/c++  $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -o CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.o -c /home/jianmi/grebotMap_jm/src/handlers/NavigationLifecycleHandler.cc
+
+CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/jianmi/grebotMap_jm/src/handlers/NavigationLifecycleHandler.cc > CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.i
+
+CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/jianmi/grebotMap_jm/src/handlers/NavigationLifecycleHandler.cc -o CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.s
+
+CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.o: CMakeFiles/robot_dog.dir/flags.make
+CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.o: ../src/handlers/MapWorkflowHandler.cc
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.o"
+	/usr/bin/c++  $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -o CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.o -c /home/jianmi/grebotMap_jm/src/handlers/MapWorkflowHandler.cc
+
+CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/jianmi/grebotMap_jm/src/handlers/MapWorkflowHandler.cc > CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.i
+
+CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/jianmi/grebotMap_jm/src/handlers/MapWorkflowHandler.cc -o CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.s
+
+CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.o: CMakeFiles/robot_dog.dir/flags.make
+CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.o: ../src/handlers/DeviceHandler.cc
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.o"
+	/usr/bin/c++  $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -o CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.o -c /home/jianmi/grebotMap_jm/src/handlers/DeviceHandler.cc
+
+CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/jianmi/grebotMap_jm/src/handlers/DeviceHandler.cc > CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.i
+
+CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/jianmi/grebotMap_jm/src/handlers/DeviceHandler.cc -o CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.s
+
 CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.o: CMakeFiles/robot_dog.dir/flags.make
 CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.o: ../src/localWebsocket/LocalWebsocketServer.cc
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.o"
 	/usr/bin/c++  $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -o CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.o -c /home/jianmi/grebotMap_jm/src/localWebsocket/LocalWebsocketServer.cc
 
 CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.i: cmake_force
@@ -98,7 +137,7 @@ CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.s: cmake_for
 
 CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.o: CMakeFiles/robot_dog.dir/flags.make
 CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.o: ../src/aiRecognition/AiRecognitionAckHandler.cc
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.o"
 	/usr/bin/c++  $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -o CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.o -c /home/jianmi/grebotMap_jm/src/aiRecognition/AiRecognitionAckHandler.cc
 
 CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.i: cmake_force
@@ -113,6 +152,9 @@ CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.s: cmake_f
 robot_dog_OBJECTS = \
 "CMakeFiles/robot_dog.dir/src/main.cc.o" \
 "CMakeFiles/robot_dog.dir/src/CommandExecutor.cc.o" \
+"CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.o" \
+"CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.o" \
+"CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.o" \
 "CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.o" \
 "CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.o"
 
@@ -121,6 +163,9 @@ robot_dog_EXTERNAL_OBJECTS =
 
 robot_dog: CMakeFiles/robot_dog.dir/src/main.cc.o
 robot_dog: CMakeFiles/robot_dog.dir/src/CommandExecutor.cc.o
+robot_dog: CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.o
+robot_dog: CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.o
+robot_dog: CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.o
 robot_dog: CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.o
 robot_dog: CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.o
 robot_dog: CMakeFiles/robot_dog.dir/build.make
@@ -186,7 +231,7 @@ robot_dog: /usr/lib/aarch64-linux-gnu/libboost_thread.so.1.71.0
 robot_dog: /usr/lib/aarch64-linux-gnu/libconsole_bridge.so.0.4
 robot_dog: /usr/lib/aarch64-linux-gnu/libcurl.so
 robot_dog: CMakeFiles/robot_dog.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable robot_dog"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Linking CXX executable robot_dog"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/robot_dog.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

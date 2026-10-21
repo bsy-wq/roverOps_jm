@@ -1926,6 +1926,8 @@ src/gateway/CMakeFiles/gateway.dir/gateway.cc.o: ../src/gateway/gateway.cc \
   /usr/local/include/spdlog/details/synchronous_factory.h \
   /usr/local/include/spdlog/version.h \
   /usr/local/include/spdlog/spdlog-inl.h \
+  ../include/common/utils.h \
+  ../include/common/json.hpp \
   /usr/local/include/spdlog/sinks/basic_file_sink.h \
   /usr/local/include/spdlog/details/file_helper.h \
   /usr/local/include/spdlog/details/file_helper-inl.h \
@@ -1946,6 +1948,8 @@ src/gateway/CMakeFiles/gateway.dir/gateway.cc.o: ../src/gateway/gateway.cc \
 /usr/local/include/spdlog/details/file_helper-inl.h:
 
 /usr/local/include/spdlog/details/file_helper.h:
+
+../include/common/utils.h:
 
 /usr/local/include/spdlog/spdlog-inl.h:
 

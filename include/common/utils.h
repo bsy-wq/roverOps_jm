@@ -11,6 +11,8 @@
 #include <memory>
 #include <array>
 #include <cstdio>
+#include <cstdlib>
+#include <stdexcept>
 
 using json = nlohmann::json;
 
@@ -209,4 +211,15 @@ inline std::string get_serial_number() {
 
     pclose(pipe);
     return trim_copy(result);
+}
+
+inline std::string get_home_dir()
+{
+    const char* home = std::getenv("HOME");
+
+    if (home == nullptr || home[0] == '\0') {
+        throw std::runtime_error("HOME environment variable is not set");
+    }
+
+    return home;
 }

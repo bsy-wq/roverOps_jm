@@ -2,13 +2,15 @@
 
 #include <cmath>
 
-MotionHandle::MotionHandle(ros::NodeHandle& nh)
+MotionHandle::MotionHandle(ros::NodeHandle& nh, const std::string& motion_control_version)
+    : use_new_motion_control_(motion_control_version == "new")
 {
     motion_cmd_pub_ = nh.advertise<std_msgs::String>("/motion_cmd", 10);
     robot_state_sub_ = nh.subscribe(
         "/m20_v06/robot_state", 10, &MotionHandle::robot_state_callback, this);
     running_.store(true, std::memory_order_release);
     watchdog_thread_ = std::thread(&MotionHandle::watchdog_loop, this);
+    ROS_INFO("[Motion] motion_control_version=%s", use_new_motion_control_ ? "new" : "old");
 }
 
 MotionHandle::~MotionHandle()
@@ -22,15 +24,26 @@ MotionHandle::~MotionHandle()
 void MotionHandle::publish_motion_cmd(
     const std::string& target_mode, double lin_x, double lin_y, double ang_z)
 {
-    json payload = {
-        {"source", "navigation"},
-        {"target_mode", target_mode},
-        {"ttl_sec", 1.0},
-        {"twist", {
-            {"linear", {{"x", lin_x}, {"y", lin_y}, {"z", 0.0}}},
-            {"angular", {{"x", 0.0}, {"y", 0.0}, {"z", ang_z}}}
-        }}
-    };
+    json payload;
+    if (use_new_motion_control_) {
+        payload = {
+            {"source", "navigation"},
+            {"target_mode", target_mode},
+            {"stamp", 0.0},
+            {"ttl_sec", 1.0},
+            {"twist", {
+                {"linear", {{"x", lin_x}, {"y", lin_y}, {"z", 0.0}}},
+                {"angular", {{"x", 0.0}, {"y", 0.0}, {"z", ang_z}}}
+            }}
+        };
+    } else {
+        payload = {
+            {"source", "navigation"},
+            {"target_mode", target_mode},
+            {"ttl_sec", 1.0},
+            {"twist", {{"x", lin_x}, {"y", lin_y}, {"z", ang_z}}}
+        };
+    }
 
     std_msgs::String msg;
     msg.data = payload.dump();
@@ -44,6 +57,7 @@ void MotionHandle::robot_state_callback(
         return;
     }
 
+    // 纯阻尼或者趴倒的时候, 不发 stand
     robot_blocks_idle_stand_.store(
         msg->mode_id == 1 || msg->mode_id == 2, std::memory_order_release);
     robot_state_received_.store(true, std::memory_order_release);
@@ -87,6 +101,50 @@ void MotionHandle::watchdog_loop()
         }
         std::this_thread::sleep_for(kWatchdogInterval);
     }
+}
+
+bool MotionHandle::is_stop_or_estop(const json& data)
+{
+    const json& payload =
+        data.contains("data") && data["data"].is_object() ? data["data"] : data;
+    const std::string command = payload.value("command", data.value("command", ""));
+    if (command == "stop" || command == "emergency_stop") {
+        return true;
+    }
+    if (!command.empty()) {
+        return false;
+    }
+
+    const json parameters =
+        payload.contains("parameters") && payload["parameters"].is_object()
+            ? payload["parameters"] : payload;
+    const bool has_linear = parameters.contains("linear_velocity");
+    const bool has_angular = parameters.contains("angular_velocity");
+    if (!has_linear && !has_angular) {
+        return false;
+    }
+
+    auto is_zero = [&parameters](const char* key) -> bool {
+        if (!parameters.contains(key)) {
+            return true;
+        }
+        const json& raw = parameters[key];
+        try {
+            if (raw.is_number()) {
+                return std::abs(raw.get<double>()) < 1e-6;
+            }
+            if (raw.is_string()) {
+                const std::string text = raw.get<std::string>();
+                size_t parsed_chars = 0;
+                const double value = std::stod(text, &parsed_chars);
+                return parsed_chars == text.size() && std::abs(value) < 1e-6;
+            }
+        } catch (...) {
+            return false;
+        }
+        return false;
+    };
+    return is_zero("linear_velocity") && is_zero("angular_velocity");
 }
 
 void MotionHandle::handle_action_control(const json& data)

@@ -1,10 +1,16 @@
 #include "../include/CommandExecutor.h"
 
+#include "handlers/DeviceHandler.h"
+#include "handlers/MapWorkflowHandler.h"
+#include "handlers/NavigationLifecycleHandler.h"
+
 #include "gateway/gateway.h"
 #include "../include/common/log_manager.h"
+#include "common/process_runner.h"
 #include "manager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <cerrno>
 #include <cmath>
@@ -36,6 +42,7 @@ void CommandExecutor::setGateway(gateway* gw) {
 CommandExecutor::CommandExecutor(ros::NodeHandle& nh, 
                                         const std::string& device_id, const std::string& http_ip, 
                                         const int& http_port,
+                                        const std::string& motion_control_version,
                                         const std::string& scripts_path, const std::string& map_dir,
                                         const std::vector<std::string>& map_files,
                                         const char* bms_model,
@@ -66,7 +73,6 @@ CommandExecutor::CommandExecutor(ros::NodeHandle& nh,
     }
     nav_process_ = -1;
     goal_process_ = -1;
-    mapping_process_ = -1;
     cleanup_process_ = -1;
 
     map_manager_ = std::make_unique<MapManager>(http_ip, http_port);
@@ -79,8 +85,6 @@ CommandExecutor::CommandExecutor(ros::NodeHandle& nh,
         scripts_path_,
         map_dir_,
         map_files_,
-        mapping_process_,
-        process_mutex_,
         map_manager_.get(),
         [this](const std::string& message) {
             send_to_cloud(message);
@@ -102,6 +106,33 @@ CommandExecutor::CommandExecutor(ros::NodeHandle& nh,
         },
         [this](const std::string& cmd_type) {
             finish_command(cmd_type);
+        },
+        [this](bool success, const std::string& reason) {
+            if (success) {
+                // Collection stopped and the first upload succeeded. Keep the
+                // robot out of Idle until nav-upload-successful finishes the
+                // post-processing/upload stage.
+                if (behavior_fsm_.mapping_processing()) {
+                    start_mapping_processing_timeout();
+                } else {
+                    LOG_WARN("[Mapping] mapping_processing transition ignored, state={}",
+                             RobotFsm::name(behavior_fsm_.snapshot().motion_mode));
+                }
+                publish_fsm_state("stop_and_uploadmap", "success");
+            } else {
+                behavior_fsm_.mapping_failed(reason);
+                publish_fsm_state("stop_and_uploadmap", "failed", reason);
+                send_to_cloud(json{
+                    {"type", "stop_and_uploadmap"},
+                    {"status", "failed"},
+                    {"code", 1},
+                    {"message", reason},
+                    {"localTime", getTimeNow()}
+                }.dump());
+            }
+        },
+        [this]() {
+            return shutting_down_.load(std::memory_order_acquire);
         });
 
     robot_state_handle_ = std::make_unique<robotState>(
@@ -112,7 +143,7 @@ CommandExecutor::CommandExecutor(ros::NodeHandle& nh,
         }
     );
 
-    motion_handle_ = std::make_unique<MotionHandle>(nh_);
+    motion_handle_ = std::make_unique<MotionHandle>(nh_, motion_control_version);
 
     broadcast_handle_ = std::make_unique<Broadcast>(
         device_id_,
@@ -124,7 +155,7 @@ CommandExecutor::CommandExecutor(ros::NodeHandle& nh,
     );
 
     std::string follow_base_url;
-    nh_.param<std::string>("follow_base_url", follow_base_url, "http://127.0.0.1:8088");
+    nh_.param<std::string>("follow_base_url", follow_base_url, "http://122.192.33.182:2802");
     follow_ = std::make_unique<Follow>(
         device_id_,
         [this](const std::string& message) {
@@ -149,9 +180,11 @@ CommandExecutor::CommandExecutor(ros::NodeHandle& nh,
 
     init_ros_publishers();
     init_ros_subscribers();
+    register_command_handlers();
 }
 
 CommandExecutor::~CommandExecutor() {
+    shutting_down_.store(true, std::memory_order_release);
     if (robot_state_handle_) {
         robot_state_handle_->clear_navigation_environment();
     }
@@ -160,15 +193,16 @@ CommandExecutor::~CommandExecutor() {
         telemetry_thread_.join();
     }
 
-    std::vector<std::thread> workers;
+    reap_finished_workers();
+    std::vector<BackgroundWorker> workers;
     {
         std::lock_guard<std::mutex> lock(worker_mutex_);
         workers = std::move(background_workers_);
     }
 
     for (auto& worker : workers) {
-        if (worker.joinable()) {
-            worker.join();
+        if (worker.thread.joinable()) {
+            worker.thread.join();
         }
     }
 
@@ -196,7 +230,7 @@ void CommandExecutor::init_ros_publishers() {
 }
 
 void CommandExecutor::init_ros_subscribers() {
-    loc_sub_ = nh_.subscribe("/localization", 10, &CommandExecutor::localization_callback, this);
+    loc_sub_ = nh_.subscribe("/localization_body", 10, &CommandExecutor::localization_callback, this);
     global_path_sub_ = nh_.subscribe("/neupan_path", 10, &CommandExecutor::global_path_callback, this);
     rosout_sub_ = nh_.subscribe("/rosout", 50, &CommandExecutor::initial_pose_rosout_callback, this);
     if (robot_state_handle_) {
@@ -205,12 +239,7 @@ void CommandExecutor::init_ros_subscribers() {
             10,
             &robotState::read_ros_state_info_callback,
             robot_state_handle_.get());
-        bms_info_ = nh_.subscribe(
-            "/m20/bms_state",
-            10,
-            &robotState::read_ros_bms_info_callback,
-            robot_state_handle_.get());
-        LOG_INFO("[RobotState] subscribed /robot_state, /m20/bms_state");
+        LOG_INFO("[RobotState] subscribed /robot_state; battery supplied by BatteryProvider");
     }
 }
 
@@ -362,23 +391,102 @@ void CommandExecutor::try_flush_msgs()
     }
 }
 
-void CommandExecutor::launch_background_task(std::thread&& worker) {
+void CommandExecutor::send_background_error(const std::string& message) {
+    try {
+        send_to_cloud(json{
+            {"type", "background_task_error"},
+            {"status", "failed"},
+            {"message", message},
+            {"localTime", getTimeNow()}
+        }.dump());
+    } catch (...) {
+        // The logger is the only safe sink left if cloud delivery throws.
+    }
+}
+
+void CommandExecutor::reap_finished_workers() {
+    std::vector<BackgroundWorker> finished;
+    {
+        std::lock_guard<std::mutex> lock(worker_mutex_);
+        for (auto it = background_workers_.begin(); it != background_workers_.end();) {
+            if (it->done && it->done->load(std::memory_order_acquire)) {
+                finished.push_back(std::move(*it));
+                it = background_workers_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (auto& worker : finished) {
+        if (worker.thread.joinable()) {
+            worker.thread.join();
+        }
+    }
+}
+
+void CommandExecutor::launch_background_task(
+    std::function<void()> task,
+    std::function<void(const std::string&)> on_error) {
+    // Reap completed tasks on every launch so the vector cannot grow without
+    // bound during long runs.
+    reap_finished_workers();
+
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    std::thread worker(
+        [this, task = std::move(task), on_error = std::move(on_error), done]() mutable {
+            try {
+                task();
+            } catch (const std::exception& e) {
+                LOG_ERROR("[Background] uncaught exception: {}", e.what());
+                if (on_error) {
+                    try {
+                        on_error(e.what());
+                    } catch (...) {
+                    }
+                } else {
+                    send_background_error(e.what());
+                }
+            } catch (...) {
+                LOG_ERROR("[Background] uncaught unknown exception");
+                if (on_error) {
+                    try {
+                        on_error("unknown exception");
+                    } catch (...) {
+                    }
+                } else {
+                    send_background_error("unknown exception");
+                }
+            }
+            done->store(true, std::memory_order_release);
+        });
+
     std::lock_guard<std::mutex> lock(worker_mutex_);
-    background_workers_.emplace_back(std::move(worker));
+    background_workers_.push_back({std::move(worker), std::move(done)});
+}
+
+bool CommandExecutor::sleep_for_or_shutdown(std::chrono::milliseconds duration) {
+    constexpr auto kStep = std::chrono::milliseconds(100);
+    auto remaining = duration;
+    while (remaining.count() > 0) {
+        if (shutting_down_.load(std::memory_order_acquire)) return false;
+        const auto step = remaining < kStep ? remaining : kStep;
+        std::this_thread::sleep_for(step);
+        remaining -= step;
+    }
+    return !shutting_down_.load(std::memory_order_acquire);
 }
 
 void CommandExecutor::log_runtime_flags(const char* stage) const {
     pid_t nav_pid = -1;
     pid_t goal_pid = -1;
-    pid_t mapping_pid = -1;
     pid_t cleanup_pid = -1;
     {
         std::lock_guard<std::mutex> lock(process_mutex_);
         nav_pid = nav_process_;
         goal_pid = goal_process_;
-        mapping_pid = mapping_process_;
         cleanup_pid = cleanup_process_;
     }
+    const pid_t mapping_pid = mapping_handle_ ? mapping_handle_->current_pid() : -1;
 
     LOG_INFO("[Runtime] stage={}, navigation_env_ready={}, localization_system_ready={}, localization_ready={}, upload_enable={}, nav_pid={}, goal_pid={}, mapping_pid={}, cleanup_pid={}",
              stage ? stage : "",
@@ -642,38 +750,128 @@ void CommandExecutor::execute(const json& payload_json) {
 
         LOG_ERROR("[Command] parsing error: {}", e.what());
         std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+        const auto state = behavior_fsm_.snapshot();
         if (cmd_type == "start_navigation" && robot_state_handle_ &&
-            behavior_fsm_.snapshot().motion_mode == MotionMode::StartingNavigation) {
+            state.motion_mode == MotionMode::StartingNavigation) {
             robot_state_handle_->clear_navigation_environment();
+            bool navigation_started = false;
+            {
+                std::lock_guard<std::mutex> lock(process_mutex_);
+                navigation_started = nav_process_ > 0;
+            }
+            if (!navigation_started) {
+                // Nothing started; make the command retryable without a stop.
+                behavior_fsm_.navigation_start_aborted();
+            }
+        }
+        if (cmd_type == "start_mapping" && state.motion_mode == MotionMode::Mapping) {
+            if (mapping_handle_ && mapping_handle_->is_running()) {
+                behavior_fsm_.mapping(true);
+            } else {
+                behavior_fsm_.mapping(false);
+            }
+        } else if (cmd_type == "stop_and_uploadmap" &&
+                   state.motion_mode == MotionMode::Mapping) {
+            if (mapping_handle_ && mapping_handle_->is_running()) {
+                behavior_fsm_.mapping(true);
+            } else {
+                behavior_fsm_.mapping_failed(std::string("命令异常: ") + e.what());
+            }
+        } else if (cmd_type == "nav-upload-successful" &&
+                   state.motion_mode == MotionMode::MappingProcessing) {
+            behavior_fsm_.mapping_failed(std::string("命令异常: ") + e.what());
         }
         finish_command(cmd_type);
     }
 }
 
-void CommandExecutor::robot_bt(std::string cmd_type, json data) {
+void CommandExecutor::report_command_received(const std::string& cmd_type) {
+    send_to_cloud(json{
+        {"type", cmd_type},
+        {"localTime", getTimeNow()},
+        {"status", "received"}
+    }.dump());
+    LOG_INFO("{}", cmd_type);
+}
+
+void CommandExecutor::register_command_handlers() {
+    handlers_.clear();
+    navigation_lifecycle_handler_ = std::make_unique<NavigationLifecycleHandler>(*this);
+    map_workflow_handler_ = std::make_unique<MapWorkflowHandler>(*this);
+    device_handler_ = std::make_unique<DeviceHandler>(*this);
+
+    navigation_lifecycle_handler_->register_routes(handlers_);
+    map_workflow_handler_->register_routes(handlers_);
+    device_handler_->register_routes(handlers_);
+}
+
+void CommandExecutor::robot_bt(const std::string& cmd_type, const json& data) {
+    reap_finished_workers();
+    // FSM boundary: behavior transitions, admission and the busy gate stay
+    // here. The command body is looked up in handlers_ and stays unchanged.
     if (cmd_type == "get_fsm_state") {
         publish_fsm_state(cmd_type, "success");
         return;
     }
     if (cmd_type == "start_follow" || cmd_type == "stop_follow") {
-        handle_follow_command(cmd_type, data);
+        handle_follow_command(cmd_type, data, false);
         return;
     }
+
+    // Navigation and mapping both require Idle. Reject before taking the
+    // behavior lock so these commands do not wait behind a long follow startup
+    // or navigation cleanup.
+    if (cmd_type == "start_navigation" || cmd_type == "start_mapping") {
+        const auto pre_state = behavior_fsm_.snapshot();
+        if (pre_state.motion_mode != MotionMode::Idle) {
+            publish_fsm_state(cmd_type, "rejected",
+                              behavior_rejection_message(cmd_type, pre_state.motion_mode));
+            return;
+        }
+    }
+
+    // Web motion is below navigation/follow in the priority chain. Only Idle
+    // may move the base; explicit stop/emergency_stop always passes.
+    std::unique_lock<std::recursive_mutex> web_motion_lock;
+    if (cmd_type == "action_control" || cmd_type == "control") {
+        if (!admit_web_motion_command(cmd_type, data, web_motion_lock)) return;
+    }
+
+    // Parameter changes are the lowest-priority external behavior, so keep
+    // them out of navigation/follow/mapping. The lock is held through dispatch
+    // to prevent a behavior transition from racing the write.
+    std::unique_lock<std::recursive_mutex> parameter_lock;
+    if (cmd_type == "set_param") {
+        parameter_lock = std::unique_lock<std::recursive_mutex>(behavior_execution_mutex_);
+        const auto state = behavior_fsm_.snapshot();
+        if (state.motion_mode != MotionMode::Idle) {
+            publish_fsm_state(cmd_type, "rejected",
+                              behavior_rejection_message(cmd_type, state.motion_mode));
+            return;
+        }
+    }
+
     const bool behavior_command = is_managed_command(cmd_type) ||
         cmd_type == "pause_task" || cmd_type == "resume_task" ||
         cmd_type == "start_recharge" || cmd_type == "stop_recharge" ||
         cmd_type == "set_dock_pose";
     std::unique_lock<std::recursive_mutex> behavior_lock(behavior_execution_mutex_, std::defer_lock);
     if (cmd_type == "stop_navigation") {
+        // Take the behavior lock before entering Stopping so a concurrent
+        // follow either queues behind this stop or starts after it.
+        behavior_lock.lock();
         if (!behavior_fsm_.begin_stop()) {
-            publish_fsm_state(cmd_type, "rejected", "Current behavior cannot be stopped by stop_navigation");
+            publish_fsm_state(cmd_type, "rejected",
+                              behavior_rejection_message(cmd_type, behavior_fsm_.snapshot().motion_mode));
             return;
         }
-        behavior_lock.lock();
         invalidate_navigation_requests();
         const bool stopped = handle_stop_navigation(data);
         behavior_fsm_.stopped(stopped, stopped ? "" : "Navigation cleanup failed");
         publish_fsm_state(cmd_type, stopped ? "success" : "failed");
+        // A follow that arrived while stopping was queued; run it only after
+        // the stop has completed.
+        process_pending_follow_request();
         return;
     }
     if (behavior_command) {
@@ -683,205 +881,29 @@ void CommandExecutor::robot_bt(std::string cmd_type, json data) {
     if (!try_begin_command(cmd_type)) return;
     if (cmd_type == "start_navigation" && !behavior_fsm_.begin_navigation()) {
         finish_command(cmd_type);
-        publish_fsm_state(cmd_type, "rejected", "Navigation cannot start in current state");
+        publish_fsm_state(cmd_type, "rejected",
+                          behavior_rejection_message(cmd_type, behavior_fsm_.snapshot().motion_mode));
         return;
     }
     if (cmd_type == "start_mapping" && !behavior_fsm_.begin_mapping()) {
         finish_command(cmd_type);
-        publish_fsm_state(cmd_type, "rejected", "Mapping cannot start in current state");
+        publish_fsm_state(cmd_type, "rejected",
+                          behavior_rejection_message(cmd_type, behavior_fsm_.snapshot().motion_mode));
         return;
     }
 
-    if (cmd_type == "initial_pose") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        handle_initial_pose(data);
-    } else if (cmd_type == "start_navigation") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        handle_start_navigation(data);
-    } else if (cmd_type == "navigation_task") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        handle_navigation_task(data);
-    } else if (cmd_type == "set_dock_pose") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        handle_set_dock_pose(data);
-    } else if (cmd_type == "action_control" || cmd_type == "control") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        if (motion_handle_) {
-            motion_handle_->handle_action_control(data);
+    const auto handler = handlers_.find(cmd_type);
+    if (handler == handlers_.end()) {
+        LOG_WARN("[Command] no handler registered for type={}", cmd_type);
+        // A managed command that reaches this point took the busy slot in
+        // try_begin_command(). Release it instead of leaving the gate stuck.
+        if (is_managed_command(cmd_type)) {
+            finish_command(cmd_type);
+            publish_fsm_state(cmd_type, "rejected", "命令未实现");
         }
-        LOG_INFO("{}", cmd_type);
-    } else if (cmd_type == "set_position_upload_frequency") {
-        handle_set_position_upload_frequency(data);
-    } else if (cmd_type == "stop_navigation") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        (void)handle_stop_navigation(data);
-        finish_command(cmd_type);
-    } else if (cmd_type == "start_mapping") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        handle_start_mapping(data);
-        {
-            std::lock_guard<std::mutex> lock(process_mutex_);
-            behavior_fsm_.mapping(mapping_process_ > 0);
-        }
-        finish_command(cmd_type);
-    } else if (cmd_type == "stop_and_uploadmap") {
-        json stop_test = {
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        };
-        send_to_cloud(stop_test.dump());
-        LOG_INFO("{}", cmd_type);
-        handle_stop_and_uploadmap(data);
-    } else if (cmd_type == "nav-upload-successful") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        handle_start_sh(data);
-        finish_command(cmd_type);
-    } else if (cmd_type == "start_task") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        exec_rosservice_cmd("start_task", "/start_task");           
-    } else if (cmd_type == "pause_task" || cmd_type == "resume_task") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        enqueue_task_state_request(cmd_type, cmd_type == "pause_task");
-    } else if (cmd_type == "clear_waypoints") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        unsigned long long clear_attempt_id = 0;
-        {
-            std::lock_guard<std::mutex> lock(clear_waypoints_mutex_);
-            clear_waypoints_pending_ = true;
-            clear_attempt_id = ++clear_waypoints_attempt_id_;
-        }
-        launch_background_task(std::thread([this, clear_attempt_id]() {
-            std::this_thread::sleep_for(std::chrono::seconds(kClearWaypointsAckTimeoutSec_));
-            complete_clear_waypoints_result(
-                clear_attempt_id,
-                false,
-                "Timeout waiting for clear waypoints confirmation");
-        }));
-        exec_rosservice_cmd("clear_waypoints", "/clear_waypoints");           
-    } else if (cmd_type == "cancel_task") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        exec_rosservice_cmd("cancel_task", "/cancel_task");           
-    } else if (cmd_type == "start_recharge") { // 开始回充
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        exec_rosservice_cmd("start_recharge", "/start_recharge");  
-    } else if (cmd_type == "stop_recharge") { // 结束回充
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        exec_rosservice_cmd("stop_recharge", "/stop_recharge");  
-    } else if (cmd_type == "upload_require_file") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        LOG_INFO("{}", cmd_type);
-        exec_upload_cmd(cmd_type);
-    } else if (cmd_type == "hikvision_continuous") {
-        if (hikvision_handle_ == nullptr) {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"status", "failed"},
-                {"error_message", "海康云台模块未初始化"}
-            }.dump());
-        } else {
-            send_to_cloud(
-                hikvision_handle_->handle_continuous_command(data).dump());
-        }
-    } else if (cmd_type == "hikvision") {
-        send_to_cloud(json{
-            {"type", cmd_type},
-            {"localTime", getTimeNow()},
-            {"status", "received"}
-        }.dump());
-        if (hikvision_handle_ == nullptr) {
-            send_to_cloud(json{
-                {"type", cmd_type},
-                {"error_message", "海康云台模块未初始化"}
-            }.dump());
-        } else {
-            send_to_cloud(hikvision_handle_->handle_command(data).dump());
-        }
-    } else if (cmd_type == "set_param") {
-        modify_handle_.updateParam(data);
-    } else if (cmd_type == "bsy_test") {
-        std::vector<std::string> bsy_file = {"666.pcd"};
-        std::string bsy_file_path = "/home/jianmi/yq";
-        std::string end_path = "yq/000";
-        map_manager_->upload_map_sh(device_id_, "yq", "000", bsy_file_path, bsy_file, end_path, "6335d16b-ec5b-4183-99b7-36c075baeaa8");
-    } else if (cmd_type == "upload_broatcast") {
-        broadcast_handle_->download_broadcast("trailer.mp4", http_ip_, http_port_);
-    } else if (cmd_type == "follow") {
-        follow_->handle_follow_function(data);
+        return;
     }
+    handler->second(data);
 }
 
 void CommandExecutor::publish_fsm_state(const std::string& command, const std::string& status,
@@ -899,13 +921,70 @@ void CommandExecutor::publish_fsm_state(const std::string& command, const std::s
              command, status, RobotFsm::name(state.motion_mode), state.generation, message);
 }
 
+std::string CommandExecutor::behavior_rejection_message(
+    const std::string& type, MotionMode mode) const {
+    const bool following = mode == MotionMode::StartingFollow || mode == MotionMode::Following;
+    const bool navigating = RobotFsm::is_navigation(mode);
+
+    if (type == "start_navigation") {
+        if (following) return "正在进行跟随，导航指令已忽略";
+        if (mode == MotionMode::Mapping || mode == MotionMode::MappingProcessing)
+            return "正在建图，请先结束建图";
+        if (mode == MotionMode::Stopping) return "正在停止，请稍后重试";
+        if (mode == MotionMode::Failed) return "系统故障，请先停止/复位";
+    } else if (type == "start_mapping") {
+        if (following) return "正在进行跟随，请先结束跟随";
+        if (navigating) return "正在导航，请先结束导航";
+        if (mode == MotionMode::Mapping) return "正在建图";
+        if (mode == MotionMode::MappingProcessing) return "正在处理/上传建图数据";
+        if (mode == MotionMode::Stopping) return "正在停止，请稍后重试";
+        if (mode == MotionMode::Failed) return "系统故障，请先停止/复位";
+    } else if (type == "start_follow") {
+        if (mode == MotionMode::Mapping || mode == MotionMode::MappingProcessing)
+            return "正在建图，请先结束建图";
+        if (mode == MotionMode::Stopping) return "正在停止，跟随指令已排队";
+        if (mode == MotionMode::Failed) return "系统故障，请先停止/复位";
+    } else if (type == "stop_navigation") {
+        if (following) return "正在进行跟随，停止导航指令已忽略";
+        if (mode == MotionMode::Mapping || mode == MotionMode::MappingProcessing)
+            return "正在建图，请使用结束建图";
+        if (mode == MotionMode::Stopping) return "正在停止";
+    } else if (type == "action_control" || type == "control") {
+        if (navigating) return "正在导航，禁止Web运控";
+        if (following) return "正在进行跟随，禁止Web运控";
+        if (mode == MotionMode::Mapping || mode == MotionMode::MappingProcessing)
+            return "正在建图，禁止Web运控";
+        if (mode == MotionMode::Stopping) return "正在停止，禁止Web运控";
+        if (mode == MotionMode::Failed) return "系统故障，禁止Web运控";
+    } else if (type == "set_param") {
+        if (navigating) return "正在导航，禁止修改参数";
+        if (following) return "正在进行跟随，禁止修改参数";
+        if (mode == MotionMode::Mapping || mode == MotionMode::MappingProcessing)
+            return "正在建图，禁止修改参数";
+        if (mode == MotionMode::Stopping) return "正在停止，禁止修改参数";
+        if (mode == MotionMode::Failed) return "系统故障，禁止修改参数";
+    } else if (following) {
+        return "正在进行跟随";
+    } else if (navigating) {
+        return "正在导航";
+    } else if (mode == MotionMode::Mapping || mode == MotionMode::MappingProcessing) {
+        return "正在建图";
+    }
+    return "Command is not allowed in current behavior state";
+}
+
 bool CommandExecutor::admit_behavior_command(const std::string& type) {
     const auto state = behavior_fsm_.snapshot();
     bool allowed = false;
     if (type == "start_navigation" || type == "start_mapping") {
         allowed = state.motion_mode == MotionMode::Idle;
-    } else if (type == "stop_and_uploadmap" || type == "nav-upload-successful") {
+    } else if (type == "stop_and_uploadmap") {
         allowed = state.motion_mode == MotionMode::Mapping;
+    } else if (type == "nav-upload-successful") {
+        // The two-stage flow is: stop_and_uploadmap -> MappingProcessing ->
+        // nav-upload-successful -> Idle. Do not accept it while collection is
+        // still active, otherwise post-processing races the capture process.
+        allowed = state.motion_mode == MotionMode::MappingProcessing;
     } else {
         allowed = RobotFsm::is_navigation(state.motion_mode);
         if (type != "stop_recharge" && type != "cancel_task") {
@@ -915,8 +994,38 @@ bool CommandExecutor::admit_behavior_command(const std::string& type) {
             allowed = allowed && state.localization_ready;
         }
     }
-    if (!allowed) publish_fsm_state(type, "rejected", "Command is not allowed in current behavior state");
+    if (!allowed) {
+        publish_fsm_state(type, "rejected",
+                          behavior_rejection_message(type, state.motion_mode));
+    }
     return allowed;
+}
+
+bool CommandExecutor::admit_web_motion_command(
+    const std::string& cmd_type, const json& data,
+    std::unique_lock<std::recursive_mutex>& behavior_lock) {
+    // Safety stops must never be blocked by a behavior transition.
+    if (MotionHandle::is_stop_or_estop(data)) {
+        return true;
+    }
+
+    // Do not block the gateway thread behind a long navigation cleanup.
+    behavior_lock = std::unique_lock<std::recursive_mutex>(
+        behavior_execution_mutex_, std::try_to_lock);
+    if (!behavior_lock.owns_lock()) {
+        publish_fsm_state(cmd_type, "rejected", "系统正在切换行为，禁止Web运控");
+        return false;
+    }
+
+    const auto state = behavior_fsm_.snapshot();
+    if (state.motion_mode == MotionMode::Idle) {
+        return true;
+    }
+
+    behavior_lock.unlock();
+    publish_fsm_state(cmd_type, "rejected",
+                      behavior_rejection_message(cmd_type, state.motion_mode));
+    return false;
 }
 
 void CommandExecutor::invalidate_navigation_requests() {
@@ -957,37 +1066,203 @@ void CommandExecutor::invalidate_navigation_requests() {
     }
 }
 
-void CommandExecutor::handle_follow_command(const std::string& type, const json& data) {
+void CommandExecutor::queue_pending_follow_request(const json& data, bool start_backend) {
+    std::lock_guard<std::mutex> lock(follow_pending_mutex_);
+    pending_follow_request_.data = data;
+    pending_follow_request_.start_backend = start_backend;
+    has_pending_follow_request_ = true;
+    LOG_INFO("[Follow] queued while stopping, backend={}", start_backend);
+}
+
+void CommandExecutor::clear_pending_follow_request() {
+    std::lock_guard<std::mutex> lock(follow_pending_mutex_);
+    if (!has_pending_follow_request_) return;
+    has_pending_follow_request_ = false;
+    pending_follow_request_ = {};
+    LOG_INFO("[Follow] pending follow request cleared");
+}
+
+void CommandExecutor::process_pending_follow_request() {
+    // Called with behavior_execution_mutex_ held by every transition that can
+    // leave Stopping. The flag prevents recursive processing.
+    if (processing_pending_follow_) return;
+    // A stop that still owns the state will process the queue when it leaves
+    // Stopping; do not spin on it here.
+    if (behavior_fsm_.snapshot().motion_mode == MotionMode::Stopping) return;
+    processing_pending_follow_ = true;
+    struct Guard {
+        bool& flag;
+        ~Guard() { flag = false; }
+    } guard{processing_pending_follow_};
+
+    while (true) {
+        PendingFollowRequest request;
+        {
+            std::lock_guard<std::mutex> lock(follow_pending_mutex_);
+            if (!has_pending_follow_request_) return;
+            request = pending_follow_request_;
+            has_pending_follow_request_ = false;
+            pending_follow_request_ = {};
+        }
+        LOG_INFO("[Follow] processing queued follow request, backend={}", request.start_backend);
+        handle_follow_command("start_follow", request.data, request.start_backend);
+    }
+}
+
+void CommandExecutor::handle_follow_command(const std::string& type, const json& data,
+                                            bool start_backend) {
     if (type == "stop_follow") {
+        // Cancel a queued follow before waiting for an in-flight stop.
+        clear_pending_follow_request();
         std::lock_guard<std::recursive_mutex> lock(behavior_execution_mutex_);
+
+        bool backend_ok = true;
+        if (follow_ && follow_->is_running()) {
+            json stop_request = data.is_object() ? data : json::object();
+            stop_request["cmd"] = "stop_follow";
+            if (!stop_request.contains("type")) stop_request["type"] = "follow";
+            backend_ok = follow_->handle_follow_function(stop_request);
+        }
+        if (!backend_ok) {
+            publish_fsm_state(type, "failed", "跟随后端停止失败");
+            return;
+        }
+
         const bool stopped = behavior_fsm_.stop_follow();
-        if (stopped) LOG_INFO("[Follow] stop placeholder; no device command sent");
-        publish_fsm_state(type, stopped ? "success" : "rejected", "Follow backend is a placeholder");
+        if (!stopped) {
+            publish_fsm_state(type, "rejected",
+                              behavior_rejection_message(type, behavior_fsm_.snapshot().motion_mode));
+            return;
+        }
+        LOG_INFO("[Follow] stopped");
+        publish_fsm_state(type, "success", "Follow stopped");
         return;
     }
+
+    // Fast, non-blocking decisions so a duplicate command does not wait behind
+    // a long follow startup or navigation cleanup.
+    const auto pre_state = behavior_fsm_.snapshot();
+    if (pre_state.motion_mode == MotionMode::Stopping) {
+        queue_pending_follow_request(data, start_backend);
+        publish_fsm_state(type, "received", "正在停止，跟随指令已排队");
+        // The stop may finish between the snapshot and the queue. Wait for the
+        // behavior lock and drain the queue so the request cannot be lost.
+        std::unique_lock<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+        process_pending_follow_request();
+        return;
+    }
+    if (pre_state.motion_mode == MotionMode::StartingFollow ||
+        pre_state.motion_mode == MotionMode::Following) {
+        publish_fsm_state(type, "success", "正在进行跟随");
+        return;
+    }
+    if (pre_state.motion_mode == MotionMode::Mapping ||
+        pre_state.motion_mode == MotionMode::Failed) {
+        publish_fsm_state(type, "rejected",
+                          behavior_rejection_message(type, pre_state.motion_mode));
+        return;
+    }
+
+    std::unique_lock<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
     const auto decision = behavior_fsm_.begin_follow();
+    const auto state = behavior_fsm_.snapshot();
+
     if (decision == RobotFsm::FollowDecision::Rejected) {
-        publish_fsm_state(type, "rejected", "Follow cannot preempt current behavior");
+        publish_fsm_state(type, "rejected", behavior_rejection_message(type, state.motion_mode));
         return;
     }
     if (decision == RobotFsm::FollowDecision::AlreadyFollowing) {
-        publish_fsm_state(type, "placeholder", "Follow placeholder already active");
+        publish_fsm_state(type, "success", "正在进行跟随");
         return;
     }
-    publish_fsm_state(type, "received", "Stopping navigation before follow placeholder");
-    std::lock_guard<std::recursive_mutex> lock(behavior_execution_mutex_);
+    if (decision == RobotFsm::FollowDecision::Queued) {
+        queue_pending_follow_request(data, start_backend);
+        publish_fsm_state(type, "received", "正在停止，跟随指令已排队");
+        return;
+    }
+
+    publish_fsm_state(type, "received", "正在停止导航环境");
     invalidate_navigation_requests();
     // Check for an environment that may have been started outside this process too.
     std::string running_reason;
-    const bool stopped = !is_navigation_environment_running(running_reason) || handle_stop_navigation(data);
+    const bool stopped = !is_navigation_environment_running(running_reason) ||
+                         handle_stop_navigation(data);
     behavior_fsm_.stopped(stopped, stopped ? "" : "Navigation cleanup failed", true);
     if (!stopped) {
-        publish_fsm_state(type, "failed", "Follow was not started because navigation did not stop");
+        publish_fsm_state(type, "failed", "Navigation cleanup failed; follow not started");
+        process_pending_follow_request();
         return;
     }
-    LOG_INFO("[Follow] start_follow placeholder; navigation stopped, backend not implemented");
-    behavior_fsm_.follow_started();
-    publish_fsm_state(type, "placeholder", "Follow backend is not implemented; no device command sent");
+
+    bool backend_ok = true;
+    if (start_backend) {
+        if (!follow_) {
+            backend_ok = false;
+        } else {
+            backend_ok = follow_->handle_follow_function(data);
+        }
+        if (!backend_ok) {
+            behavior_fsm_.stopped(false, "跟随后端启动失败");
+            publish_fsm_state(type, "failed", "跟随后端启动失败");
+            process_pending_follow_request();
+            return;
+        }
+    }
+
+    behavior_fsm_.follow_started(!start_backend);
+    LOG_INFO("[Follow] started, backend={}", start_backend ? "http" : "placeholder");
+    if (start_backend) {
+        publish_fsm_state(type, "success", "跟随已启动");
+    } else {
+        publish_fsm_state(type, "placeholder",
+                          "Follow backend is not implemented; no device command sent");
+    }
+    process_pending_follow_request();
+}
+
+void CommandExecutor::handle_follow_backend_command(const json& data) {
+    const std::string cmd = data.is_object() ? data.value("cmd", "") : "";
+    if (cmd == "start_follow") {
+        handle_follow_command("start_follow", data, true);
+    } else if (cmd == "stop_follow" || cmd == "estop_follow") {
+        handle_follow_stop_command(cmd, data);
+    } else if (follow_) {
+        // get_follow and unknown commands keep the backend's own response.
+        follow_->handle_follow_function(data);
+    }
+}
+
+void CommandExecutor::handle_follow_stop_command(const std::string& cmd_type, const json& data) {
+    clear_pending_follow_request();
+
+    // Follow emergency stop is a safety action: send it to the backend first,
+    // then wait for the behavior transition to finish so the FSM is consistent.
+    if (cmd_type == "estop_follow") {
+        const bool backend_ok = follow_ && follow_->handle_follow_function(data);
+        {
+            std::lock_guard<std::recursive_mutex> lock(behavior_execution_mutex_);
+            behavior_fsm_.follow_stopped(false, "跟随急停");
+        }
+        publish_fsm_state(cmd_type, backend_ok ? "success" : "failed",
+                          backend_ok ? "跟随急停" : "跟随后端急停失败");
+        return;
+    }
+
+    std::lock_guard<std::recursive_mutex> lock(behavior_execution_mutex_);
+    const bool backend_ok = follow_ && follow_->handle_follow_function(data);
+    if (!backend_ok) {
+        publish_fsm_state(cmd_type, "failed", "跟随后端停止失败");
+        return;
+    }
+
+    const bool stopped = behavior_fsm_.stop_follow();
+    if (!stopped) {
+        // The backend may have been running while the FSM was already Idle.
+        publish_fsm_state(cmd_type, "success", "Follow backend stopped");
+        return;
+    }
+    LOG_INFO("[Follow] {} completed", cmd_type);
+    publish_fsm_state(cmd_type, "success", "Follow stopped");
 }
 
 bool CommandExecutor::get_robot_position(double& x, double& y, double& z)
@@ -1233,6 +1508,12 @@ void CommandExecutor::localization_callback(const nav_msgs::Odometry::ConstPtr& 
         return;
     }
 
+    {
+        std::lock_guard<std::mutex> lock(round_pose_mutex_);
+        latest_round_localization_ = msg;
+        latest_round_localization_time_ = std::chrono::steady_clock::now();
+    }
+
     const auto& pose = msg->pose.pose;
     const auto& position = pose.position;
     const auto& orientation = pose.orientation;
@@ -1324,6 +1605,54 @@ void CommandExecutor::initial_pose_rosout_callback(const rosgraph_msgs::Log::Con
         send_to_cloud(round_msg.dump());
         LOG_INFO("[NavigationTaskState] event=task_round_completed, round={}, source_message={}",
                  completed_round, rosout_message);
+        if (completed_round > last_relocalized_round_) {
+            // Consume this round before publishing; duplicate rosout must not reset localization.
+            last_relocalized_round_ = completed_round;
+            nav_msgs::Odometry::ConstPtr localization;
+            std::chrono::steady_clock::time_point received;
+            {
+                std::lock_guard<std::mutex> lock(round_pose_mutex_);
+                localization = latest_round_localization_;
+                received = latest_round_localization_time_;
+            }
+            bool initial_pose_pending = false;
+            {
+                std::lock_guard<std::mutex> lock(initial_pose_mutex_);
+                initial_pose_pending = initial_pose_pending_;
+            }
+            if (!localization ||
+                std::chrono::steady_clock::now() - received > std::chrono::seconds(2)) {
+                LOG_WARN("[RoundRelocalization] round={} skipped: no fresh localization_body", completed_round);
+            } else if (initial_pose_pending) {
+                LOG_WARN("[RoundRelocalization] round={} skipped: manual initial pose pending", completed_round);
+            } else if (localization->header.frame_id != "map" &&
+                       localization->header.frame_id != "/map") {
+                LOG_WARN("[RoundRelocalization] round={} skipped: expected map frame, got {}",
+                         completed_round, localization->header.frame_id);
+            } else {
+                const auto& pose = localization->pose.pose;
+                const auto& p = pose.position;
+                const auto& q = pose.orientation;
+                const double norm = std::sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w);
+                if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
+                    !std::isfinite(norm) || norm < 1e-6) {
+                    LOG_WARN("[RoundRelocalization] round={} skipped: invalid pose", completed_round);
+                } else {
+                    geometry_msgs::PoseWithCovarianceStamped initial_pose;
+                    initial_pose.header.frame_id = "map";
+                    initial_pose.header.stamp = ros::Time::now();
+                    initial_pose.pose.pose = pose;
+                    auto& orientation = initial_pose.pose.pose.orientation;
+                    orientation.x /= norm;
+                    orientation.y /= norm;
+                    orientation.z /= norm;
+                    orientation.w /= norm;
+                    initial_pose_pub_.publish(initial_pose);
+                    LOG_INFO("[RoundRelocalization] round={} published /initialpose from localization_body: x={}, y={}, z={}",
+                             completed_round, p.x, p.y, p.z);
+                }
+            }
+        }
     }
 
     if (rosout_message.find("任务暂停") != std::string::npos &&
@@ -1818,25 +2147,33 @@ void CommandExecutor::complete_clear_waypoints_result(unsigned long long attempt
 
 void CommandExecutor::telemetry_loop() {
     ros::Rate rate(1);
-    while (ros::ok()) {
-        if (upload_enable_.load(std::memory_order_acquire)) {
-            double x, y, z;
-            if (get_robot_position(x, y, z) && should_send_upload_position()) {
-                double roll, pitch, yaw;
-                get_robot_orientation(roll, pitch, yaw);
-                
-                const auto timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    while (ros::ok() && !shutting_down_.load(std::memory_order_acquire)) {
+        reap_finished_workers();
+        try {
+            if (upload_enable_.load(std::memory_order_acquire)) {
+                double x, y, z;
+                if (get_robot_position(x, y, z) && should_send_upload_position()) {
+                    double roll, pitch, yaw;
+                    get_robot_orientation(roll, pitch, yaw);
 
-                json pos_msg = {
-                    {"type", "upload_position"},
-                    {"device_id", device_id_},
-                    {"timestamp", timestamp_ms},
-                    {"localTime", getTimeNow()},
-                    {"position", {{"x", x}, {"y", y}, {"z", z}}},
-                    {"orientation", {{"x", 0}, {"y", 0}, {"z", sin(yaw/2)}, {"w", cos(yaw/2)}}}
-                };
-                send_to_cloud(pos_msg.dump());
+                    const auto timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+
+                    json pos_msg = {
+                        {"type", "upload_position"},
+                        {"device_id", device_id_},
+                        {"timestamp", timestamp_ms},
+                        {"localTime", getTimeNow()},
+                        {"position", {{"x", x}, {"y", y}, {"z", z}}},
+                        {"orientation", {{"x", 0}, {"y", 0}, {"z", sin(yaw/2)}, {"w", cos(yaw/2)}}}
+                    };
+                    send_to_cloud(pos_msg.dump());
+                }
             }
+        } catch (const std::exception& e) {
+            LOG_ERROR("[Telemetry] loop exception: {}", e.what());
+        } catch (...) {
+            LOG_ERROR("[Telemetry] loop unknown exception");
         }
         rate.sleep();
     }
@@ -1880,7 +2217,7 @@ void CommandExecutor::handle_initial_pose(const json& data)
     std::string final_cmd = fmt::format(
         R"(gnome-terminal -- bash -c "
             source /opt/ros/noetic/setup.bash &&
-            source /home/jianmi/fast_wa/devel/setup.bash &&
+            source \$HOME/fast_wa/devel/setup.bash &&
             rosrun fast_lio_localization publish_initial_pose.py {} {} {} {} {} {};
             echo 'Terminal will close in 10 seconds...';
             sleep 10"
@@ -1892,22 +2229,32 @@ void CommandExecutor::handle_initial_pose(const json& data)
 
     std::thread([final_cmd]() {
 
-        int ret = std::system(final_cmd.c_str());
-
-        ROS_INFO("Terminal return: %d", ret);
+        try {
+            int ret = std::system(final_cmd.c_str());
+            ROS_INFO("Terminal return: %d", ret);
+        } catch (const std::exception& e) {
+            ROS_ERROR("[InitialPose] terminal launch exception: %s", e.what());
+        } catch (...) {
+            ROS_ERROR("[InitialPose] terminal launch unknown exception");
+        }
 
     }).detach();
 
     ROS_INFO("Initial Pose sent.");
     LOG_INFO("[InitialPose] initial pose sent, waiting for localization result, attempt_id={}", attempt_id);
 
-    launch_background_task(std::thread([this, attempt_id]() {
-        std::this_thread::sleep_for(std::chrono::seconds(kInitialPoseTimeoutSec_));
-        complete_initial_pose_result(
-            attempt_id,
-            false,
-            "Timeout waiting for Initialize successfully!!!!!!");
-    }));
+    launch_background_task(
+        [this, attempt_id]() {
+            if (!sleep_for_or_shutdown(std::chrono::seconds(kInitialPoseTimeoutSec_))) return;
+            complete_initial_pose_result(
+                attempt_id,
+                false,
+                "Timeout waiting for Initialize successfully!!!!!!");
+        },
+        [this](const std::string& e) {
+            LOG_ERROR("[InitialPose] background task failed: {}", e);
+            finish_command("initial_pose");
+        });
 }
 
 // 2、开启导航 (环境初始化)
@@ -1956,39 +2303,40 @@ void CommandExecutor::handle_start_navigation(const json& data) {
         if (robot_state_handle_) {
             robot_state_handle_->clear_navigation_environment();
         }
+        behavior_fsm_.navigation_start_aborted();
         finish_command("start_navigation");
         return;
     }
 
     // 3步文件操作
     //(1) 删除相应的文件
-    fs::remove("/home/jianmi/catkin_pct/src/pct-planner/src/pct_planner_ros/rsc/pcd/navmap.pcd");
-    fs::remove("/home/jianmi/catkin_pct/src/pct-planner/src/pct_planner_ros/rsc/tomogram/navmap.pickle");
+    fs::remove(get_home_dir() + "/catkin_pct/src/pct-planner/src/pct_planner_ros/rsc/pcd/navmap.pcd");
+    fs::remove(get_home_dir() + "/catkin_pct/src/pct-planner/src/pct_planner_ros/rsc/tomogram/navmap.pickle");
 
     //(2) 先进行拷贝到 g_nav_map 文件夹下
-    fs::path file_path = fs::path("/home/jianmi/map_manager_local") / uuid;
+    fs::path file_path = fs::path(get_home_dir() + "/map_manager_local") / uuid;
     fs::copy(
         file_path / "navmap.pcd",
-        "/home/jianmi/g_nav_map/navmap.pcd",
+        get_home_dir() + "/g_nav_map/navmap.pcd",
         fs::copy_options::overwrite_existing
     );
 
     fs::copy(
         file_path / "navmap.pickle",
-        "/home/jianmi/g_nav_map/navmap.pickle",
+        get_home_dir() + "/g_nav_map/navmap.pickle",
         fs::copy_options::overwrite_existing
     );   
 
     //(3) 在从 g_nav_map 文件夹下拷贝到相应的路径下
     fs::copy(
-        "/home/jianmi/g_nav_map/navmap.pcd",
-        "/home/jianmi/catkin_pct/src/pct-planner/src/pct_planner_ros/rsc/pcd/navmap.pcd",
+        get_home_dir() + "/g_nav_map/navmap.pcd",
+        get_home_dir() + "/catkin_pct/src/pct-planner/src/pct_planner_ros/rsc/pcd/navmap.pcd",
         fs::copy_options::overwrite_existing
     );
 
     fs::copy(
-        "/home/jianmi/g_nav_map/navmap.pickle",
-        "/home/jianmi/catkin_pct/src/pct-planner/src/pct_planner_ros/rsc/tomogram/navmap.pickle",
+        get_home_dir() + "/g_nav_map/navmap.pickle",
+        get_home_dir() + "/catkin_pct/src/pct-planner/src/pct_planner_ros/rsc/tomogram/navmap.pickle",
         fs::copy_options::overwrite_existing
     );
 
@@ -2018,6 +2366,7 @@ void CommandExecutor::handle_start_navigation(const json& data) {
         if (robot_state_handle_) {
             robot_state_handle_->clear_navigation_environment();
         }
+        behavior_fsm_.navigation_start_aborted();
         finish_command("start_navigation");
         return;
     }
@@ -2025,15 +2374,26 @@ void CommandExecutor::handle_start_navigation(const json& data) {
     ROS_INFO("Preparing map: %s -> %s...", address.c_str(), display_name.c_str());
 
     launch_background_task(
-        std::thread(
-            &CommandExecutor::start_navigation_async,
-            this,
-            data,
-            uuid_old,
-            uuid,
-            generation
-        )
-    );
+        [this, data, uuid_old, uuid, generation]() {
+            start_navigation_async(data, uuid_old, uuid, generation);
+        },
+        [this](const std::string& e) {
+            std::lock_guard<std::recursive_mutex> lock(behavior_execution_mutex_);
+            if (behavior_fsm_.snapshot().motion_mode == MotionMode::StartingNavigation) {
+                bool navigation_started = false;
+                {
+                    std::lock_guard<std::mutex> process_lock(process_mutex_);
+                    navigation_started = nav_process_ > 0;
+                }
+                if (navigation_started) {
+                    behavior_fsm_.navigation_ready(false, "Navigation startup exception: " + e);
+                } else {
+                    behavior_fsm_.navigation_start_aborted();
+                }
+            }
+            finish_command("start_navigation");
+            publish_fsm_state("start_navigation", "failed", e);
+        });
 }
 
 void CommandExecutor::start_navigation_async(json data, std::string uuid_old, std::string uuid,
@@ -2043,12 +2403,12 @@ void CommandExecutor::start_navigation_async(json data, std::string uuid_old, st
     std::string address = data.value("address", "");
     std::string display_name = data.value("display_name", "");
     LOG_INFO("[NavigationEnv] async prepare map begin, address={}, display_name={}, map_dir={}",
-             address, display_name, MAP_MANAGER_LOCAL);
+             address, display_name, get_home_dir() + "/map_manager_local/");
 
     std::cout << "旧的 uuid " << uuid_old << "   新的 uuid " << uuid << std::endl;
     std::vector<std::string> download_map_files = {"gloabl_map.pcd", "navmap.pcd", "lightweight_map.npy", "navmap.pickle"};
     bool success = true;
-    fs::path file_path = fs::path(MAP_MANAGER_LOCAL) / uuid;
+    fs::path file_path = fs::path(get_home_dir() + "/map_manager_local/") / uuid;
     if (uuid_old != uuid)
     {
         if (map_manager_)
@@ -2094,6 +2454,7 @@ void CommandExecutor::start_navigation_async(json data, std::string uuid_old, st
         };
         send_to_cloud(msg2.dump());
         LOG_INFO("开始路径上报: {}", msg2.dump());
+        behavior_fsm_.navigation_start_aborted();
         finish_command("start_navigation");
         return;
     }
@@ -2105,12 +2466,12 @@ void CommandExecutor::start_navigation_async(json data, std::string uuid_old, st
     std::string nav_command = fmt::format(
     R"(gnome-terminal -- bash -c "set -e;
         source /opt/ros/noetic/setup.bash &&
-        source /home/jianmi/catkin_ws/devel/setup.bash &&
-        source /home/jianmi/catkin_livox/devel/setup.bash --extend &&
-        source /home/jianmi/catkin_pct/devel/setup.bash --extend &&
-        source /home/jianmi/fast_wa/devel/setup.bash --extend &&
-        export LD_LIBRARY_PATH=/home/jianmi/PCT_planner/planner/lib/3rdparty/gtsam-4.1.1/install/lib:$LD_LIBRARY_PATH &&
-        export LD_LIBRARY_PATH=/home/jianmi/catkin_pct/src/pct-planner/src/pct_planner_ros/lib/3rdparty/gtsam-4.1.1/install/lib:$LD_LIBRARY_PATH &&
+        source \$HOME/catkin_ws/devel/setup.bash &&
+        source \$HOME/catkin_livox/devel/setup.bash --extend &&
+        source \$HOME/catkin_pct/devel/setup.bash --extend &&
+        source \$HOME/fast_wa/devel/setup.bash --extend &&
+        export LD_LIBRARY_PATH=\$HOME/PCT_planner/planner/lib/3rdparty/gtsam-4.1.1/install/lib:$LD_LIBRARY_PATH &&
+        export LD_LIBRARY_PATH=\$HOME/catkin_pct/src/pct-planner/src/pct_planner_ros/lib/3rdparty/gtsam-4.1.1/install/lib:$LD_LIBRARY_PATH &&
         bash {} ;
         exec bash"
         )",nav_script
@@ -2141,6 +2502,7 @@ void CommandExecutor::start_navigation_async(json data, std::string uuid_old, st
         };
         send_to_cloud(msg4.dump());
         LOG_INFO("开始路径上报: {}", msg4.dump());
+        behavior_fsm_.navigation_start_aborted();
         finish_command("start_navigation");
         return;
     }
@@ -2170,17 +2532,24 @@ void CommandExecutor::start_navigation_async(json data, std::string uuid_old, st
         nav_env_attempt_id = ++navigation_env_attempt_id_;
     }
 
-    launch_background_task(std::thread([this, nav_env_attempt_id]() {
-        std::this_thread::sleep_for(std::chrono::seconds(kNavigationEnvReadyTimeoutSec_));
-        complete_navigation_env_ready(
-            nav_env_attempt_id,
-            false,
-            "Timeout waiting for Tomogram exported");
-    }));
+    launch_background_task(
+        [this, nav_env_attempt_id]() {
+            if (!sleep_for_or_shutdown(std::chrono::seconds(kNavigationEnvReadyTimeoutSec_))) return;
+            complete_navigation_env_ready(
+                nav_env_attempt_id,
+                false,
+                "Timeout waiting for Tomogram exported");
+        },
+        [this](const std::string& e) {
+            std::lock_guard<std::recursive_mutex> lock(behavior_execution_mutex_);
+            behavior_fsm_.navigation_ready(false, "Navigation environment timeout: " + e);
+            finish_command("start_navigation");
+        });
 
     behavior_lock.unlock();
-    sleep(5);
+    const bool waited = sleep_for_or_shutdown(std::chrono::seconds(5));
     behavior_lock.lock();
+    if (!waited) return;
     if (!behavior_fsm_.navigation_current(generation)) return;
 
     ROS_INFO("Navigation environment started. Waiting for tomogram export before initial_pose.");
@@ -2202,7 +2571,16 @@ void CommandExecutor::start_navigation_async(json data, std::string uuid_old, st
         std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
         if (!behavior_fsm_.navigation_current(generation)) return;
         LOG_ERROR("[NavigationEnv] startup exception: {}", e.what());
-        behavior_fsm_.navigation_ready(false, e.what());
+        bool navigation_started = false;
+        {
+            std::lock_guard<std::mutex> lock(process_mutex_);
+            navigation_started = nav_process_ > 0;
+        }
+        if (navigation_started) {
+            behavior_fsm_.navigation_ready(false, e.what());
+        } else {
+            behavior_fsm_.navigation_start_aborted();
+        }
         finish_command("start_navigation");
         publish_fsm_state("start_navigation", "failed", e.what());
     }
@@ -2218,6 +2596,11 @@ void CommandExecutor::handle_navigation_task(const json& data) {
         ROS_WARN("[CommandExecutor] navigation_task 没有有效目标点，取消发送");
         finish_command("navigation_task");
         return;
+    }
+
+    {
+        std::lock_guard<std::recursive_mutex> lock(behavior_execution_mutex_);
+        last_relocalized_round_ = 0;
     }
 
     {
@@ -2242,13 +2625,18 @@ void CommandExecutor::handle_navigation_task(const json& data) {
         navigation_task_confirmed_points_ = 0;
     }
 
-    launch_background_task(std::thread([this, nav_task_attempt_id]() {
-        std::this_thread::sleep_for(std::chrono::seconds(kNavigationTaskAckTimeoutSec_));
-        complete_navigation_task_result(
-            nav_task_attempt_id,
-            false,
-            "下发导航任务点失败！！！");
-    }));
+    launch_background_task(
+        [this, nav_task_attempt_id]() {
+            if (!sleep_for_or_shutdown(std::chrono::seconds(kNavigationTaskAckTimeoutSec_))) return;
+            complete_navigation_task_result(
+                nav_task_attempt_id,
+                false,
+                "下发导航任务点失败！！！");
+        },
+        [this, nav_task_attempt_id](const std::string& e) {
+            complete_navigation_task_result(nav_task_attempt_id, false, e);
+            finish_command("navigation_task");
+        });
 
     int cycles = data.value("times", 1) < 1 ? 1 : data.value("times", 1);
     std_msgs::Int32 msg;
@@ -2493,7 +2881,8 @@ bool CommandExecutor::handle_stop_navigation(const json& data) {
         "timeout 3s bash -c 'yes y | rosnode cleanup' >/dev/null 2>&1 || true";
     std::string residual_cleanup_cmd = "bash -lc " + shell_quote(residual_cleanup);
     LOG_INFO("[StopNavigation] run residual cleanup command: {}", residual_cleanup_cmd);
-    int residual_status = system(residual_cleanup_cmd.c_str());
+    int residual_status = process_runner::run_shell_command(
+        residual_cleanup_cmd, std::chrono::seconds(15));
     log_wait_status("navigation residual cleanup", residual_status);
 
     std::string current_map_id;
@@ -2537,6 +2926,8 @@ bool CommandExecutor::handle_stop_navigation(const json& data) {
 void CommandExecutor::handle_start_mapping(const json& data) {
     if (!mapping_handle_) {
         LOG_ERROR("[Mapping] handler is not initialized");
+        behavior_fsm_.mapping(false);
+        publish_fsm_state("start_mapping", "failed", "建图处理器未初始化");
         send_to_cloud(json{
             {"type", "start_mapping"},
             {"localTime", getTimeNow()},
@@ -2544,118 +2935,322 @@ void CommandExecutor::handle_start_mapping(const json& data) {
         }.dump());
         return;
     }
-    mapping_handle_->handle_start_mapping(data);
+    try {
+        mapping_handle_->handle_start_mapping(data);
+    } catch (const std::exception& e) {
+        LOG_ERROR("[Mapping] start_mapping exception: {}", e.what());
+        // If the process already started, keep Mapping so stop_and_uploadmap
+        // can still stop it. Otherwise return to Idle so the operator can retry.
+        if (mapping_handle_->is_running()) {
+            behavior_fsm_.mapping(true);
+        } else {
+            behavior_fsm_.mapping(false);
+        }
+        publish_fsm_state("start_mapping", "failed", e.what());
+        try {
+            send_to_cloud(json{
+                {"type", "start_mapping"},
+                {"code", -1},
+                {"localTime", getTimeNow()},
+                {"message", std::string("建图启动异常: ") + e.what()}
+            }.dump());
+        } catch (...) {
+        }
+    } catch (...) {
+        LOG_ERROR("[Mapping] start_mapping unknown exception");
+        if (mapping_handle_->is_running()) {
+            behavior_fsm_.mapping(true);
+        } else {
+            behavior_fsm_.mapping(false);
+        }
+        publish_fsm_state("start_mapping", "failed", "建图启动未知异常");
+    }
+}
+
+void CommandExecutor::handle_start_mapping_command(const json& data) {
+    report_command_received("start_mapping");
+    handle_start_mapping(data);
+    behavior_fsm_.mapping(mapping_handle_ && mapping_handle_->is_running());
+    finish_command("start_mapping");
+}
+
+void CommandExecutor::handle_nav_upload_successful_command(const json& data) {
+    report_command_received("nav-upload-successful");
+    handle_start_sh(data);
+    finish_command("nav-upload-successful");
+}
+
+void CommandExecutor::start_mapping_processing_timeout() {
+    unsigned long long attempt = 0;
+    {
+        std::lock_guard<std::mutex> lock(mapping_processing_mutex_);
+        attempt = ++mapping_processing_attempt_id_;
+    }
+
+    launch_background_task(
+        [this, attempt]() {
+            for (int elapsed = 0; elapsed < kMappingProcessingTimeoutSec_; ++elapsed) {
+                if (!sleep_for_or_shutdown(std::chrono::seconds(1))) {
+                    return;
+                }
+                {
+                    std::lock_guard<std::mutex> lock(mapping_processing_mutex_);
+                    if (attempt != mapping_processing_attempt_id_) return;
+                }
+                if (behavior_fsm_.snapshot().motion_mode != MotionMode::MappingProcessing) {
+                    return;
+                }
+            }
+
+            std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+            {
+                std::lock_guard<std::mutex> lock(mapping_processing_mutex_);
+                if (attempt != mapping_processing_attempt_id_) return;
+            }
+            if (behavior_fsm_.snapshot().motion_mode != MotionMode::MappingProcessing) {
+                return;
+            }
+            behavior_fsm_.mapping_failed("nav-upload-successful timeout");
+            publish_fsm_state("nav-upload-successful", "failed",
+                              "等待地图处理/上传确认超时");
+            try {
+                send_to_cloud(json{
+                    {"type", "nav-upload-successful"},
+                    {"status", "failed"},
+                    {"code", 1},
+                    {"message", "等待地图处理/上传确认超时"},
+                    {"localTime", getTimeNow()}
+                }.dump());
+            } catch (...) {
+            }
+        },
+        [this](const std::string& e) {
+            std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
+            behavior_fsm_.mapping_failed("nav-upload-successful timeout task: " + e);
+        });
+}
+
+void CommandExecutor::handle_bsy_test_command() {
+    std::vector<std::string> bsy_file = {"666.pcd"};
+    std::string bsy_file_path = get_home_dir() + "/yq";
+    std::string end_path = "yq/000";
+    map_manager_->upload_map_sh(
+        device_id_,
+        "yq",
+        "000",
+        bsy_file_path,
+        bsy_file,
+        end_path,
+        "6335d16b-ec5b-4183-99b7-36c075baeaa8");
+}
+
+void CommandExecutor::handle_clear_waypoints_request() {
+    report_command_received("clear_waypoints");
+    unsigned long long clear_attempt_id = 0;
+    {
+        std::lock_guard<std::mutex> lock(clear_waypoints_mutex_);
+        clear_waypoints_pending_ = true;
+        clear_attempt_id = ++clear_waypoints_attempt_id_;
+    }
+    launch_background_task([this, clear_attempt_id]() {
+        if (!sleep_for_or_shutdown(
+                std::chrono::seconds(kClearWaypointsAckTimeoutSec_))) {
+            return;
+        }
+        complete_clear_waypoints_result(
+            clear_attempt_id,
+            false,
+            "Timeout waiting for clear waypoints confirmation");
+    });
+    exec_rosservice_cmd("clear_waypoints", "/clear_waypoints");
+}
+
+void CommandExecutor::handle_task_state_request(const std::string& cmd_type) {
+    report_command_received(cmd_type);
+    enqueue_task_state_request(cmd_type, cmd_type == "pause_task");
+}
+
+void CommandExecutor::handle_action_control_command(
+    const std::string& cmd_type, const json& data) {
+    report_command_received(cmd_type);
+    if (motion_handle_) {
+        motion_handle_->handle_action_control(data);
+    }
+}
+
+void CommandExecutor::handle_hikvision_command(
+    const std::string& cmd_type, const json& data) {
+    if (cmd_type == "hikvision") {
+        report_command_received(cmd_type);
+    }
+    if (!hikvision_handle_) {
+        if (cmd_type == "hikvision_continuous") {
+            send_to_cloud(json{
+                {"type", cmd_type},
+                {"status", "failed"},
+                {"error_message", "海康云台模块未初始化"}
+            }.dump());
+        } else {
+            send_to_cloud(json{
+                {"type", cmd_type},
+                {"error_message", "海康云台模块未初始化"}
+            }.dump());
+        }
+        return;
+    }
+    if (cmd_type == "hikvision_continuous") {
+        send_to_cloud(hikvision_handle_->handle_continuous_command(data).dump());
+    } else {
+        send_to_cloud(hikvision_handle_->handle_command(data).dump());
+    }
+}
+
+void CommandExecutor::handle_set_param_command(const json& data) {
+    modify_handle_.updateParam(data);
+}
+
+void CommandExecutor::handle_broadcast_command(const json& data) {
+    (void)data;
+    if (!broadcast_handle_) return;
+    broadcast_handle_->download_broadcast("trailer.mp4", http_ip_, http_port_);
+    report_command_received("upload_broatcast");
 }
 
 void CommandExecutor::handle_start_sh(const json& data)
 {
-    // 清除掉 g_nav_map 文件夹下的内容
-    std::string clear_cmd = "rm -rf " + map_dir_ + "/*";
-    system(clear_cmd.c_str());
-    std::cout << "clear_cmd ... success " << clear_cmd << std::endl;
-
-    auto data_obj = data["data"];
-
-    std::string storage_path = data_obj.value("storage_path", "");
-    std::string uuid = data_obj.value("uuid", "");
-    std::cout << "handle_start_sh 的 uuid " << uuid << std::endl;
-
-    std::vector<std::string> parts;
-    std::stringstream ss(storage_path);
-    std::string item;
-
-    while (std::getline(ss, item, '/')) {
-        if (!item.empty()) {
-            parts.push_back(item);
+    auto fail = [this](const std::string& reason) {
+        LOG_ERROR("[Mapping] nav-upload-successful failed: {}", reason);
+        behavior_fsm_.mapping_failed(reason);
+        publish_fsm_state("nav-upload-successful", "failed", reason);
+        try {
+            send_to_cloud(json{
+                {"type", "nav-upload-successful"},
+                {"status", "failed"},
+                {"code", 1},
+                {"message", reason},
+                {"localTime", getTimeNow()}
+            }.dump());
+        } catch (...) {
         }
+    };
+
+    try {
+        // 清除掉 g_nav_map 文件夹下的内容
+        std::string clear_cmd = "rm -rf -- " + shell_quote(map_dir_) + "/*";
+        system(clear_cmd.c_str());
+        std::cout << "clear_cmd ... success " << clear_cmd << std::endl;
+
+        auto data_obj = data["data"];
+
+        std::string storage_path = data_obj.value("storage_path", "");
+        std::string uuid = data_obj.value("uuid", "");
+        std::cout << "handle_start_sh 的 uuid " << uuid << std::endl;
+
+        std::vector<std::string> parts;
+        std::stringstream ss(storage_path);
+        std::string item;
+
+        while (std::getline(ss, item, '/')) {
+            if (!item.empty()) {
+                parts.push_back(item);
+            }
+        }
+
+        if (parts.size() < 2) {
+            fail("invalid storage_path: " + storage_path);
+            return;
+        }
+
+        std::string address = parts[0];      // 坚米
+        std::string display_name = parts[1]; // 三楼
+
+        std::cout << "address: " << address << std::endl;
+        std::cout << "display_name: " << display_name << std::endl;
+
+        fs::copy(
+            get_home_dir() + "/g_build_map/gloabl_map.pcd",
+            fs::path(get_home_dir() + "/g_nav_map") / "gloabl_map.pcd",
+            fs::copy_options::overwrite_existing
+        );
+
+        fs::copy(
+            get_home_dir() + "/g_build_map/gloabl_map.pickle",
+            fs::path(get_home_dir() + "/g_nav_map") / "gloabl_map.pickle",
+            fs::copy_options::overwrite_existing
+        );
+
+        std::vector<std::string> download_map_files = {"navmap.pcd"};
+        map_manager_->download_and_deploy(address, display_name, download_map_files, map_dir_);
+
+        std::string sh_2 = get_home_dir() + "/catkin_pct/Scripts/map_process2.sh"; // lightweight_map.npy 和 navmap.pickle
+        std::cout << "map_process2.sh 执行成功... " << std::endl;
+
+        // 执行脚本，带执行期限，避免后处理挂死
+        int ret1 = process_runner::run_shell_command(
+            shell_quote(sh_2),
+            std::chrono::seconds(600),
+            [this]() { return shutting_down_.load(std::memory_order_acquire); });
+        if (ret1 != 0) {
+            fail("map_process2.sh failed, status=" + std::to_string(ret1));
+            return;
+        }
+
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::vector<std::string> final_file = {"lightweight_map.npy", "navmap.pickle"};
+        map_manager_->upload_map_sh(device_id_, address, display_name, map_dir_, final_file, storage_path, uuid);
+        std::cout << "上传 lightweight_map.npy 和 navmap.pickle 文件成功... " << std::endl;
+
+        fs::path uuid_dir =
+            fs::path(get_home_dir() + "/map_manager_local")
+            / uuid;
+
+        fs::create_directories(uuid_dir);
+
+        // 复制文件到 map_manager_local 文件夹下
+        fs::copy(
+            get_home_dir() + "/g_nav_map/lightweight_map.npy",
+            uuid_dir / "lightweight_map.npy",
+            fs::copy_options::overwrite_existing
+        );
+
+        fs::copy(
+            get_home_dir() + "/g_nav_map/navmap.pickle",
+            uuid_dir / "navmap.pickle",
+            fs::copy_options::overwrite_existing
+        );
+
+        fs::copy(
+            get_home_dir() + "/g_nav_map/gloabl_map.pcd",
+            uuid_dir / "gloabl_map.pcd",
+            fs::copy_options::overwrite_existing
+        );
+
+        fs::copy(
+            get_home_dir() + "/g_nav_map/navmap.pcd",
+            uuid_dir / "navmap.pcd",
+            fs::copy_options::overwrite_existing
+        );
+
+        send_to_cloud(json{
+            {"type", "nav-upload-successful-end"},
+            {"localTime", getTimeNow()},
+            {"code", 0},
+            {"message", "建图流程已结束, 可以进行导航操作... "}
+        }.dump());
+        if (!behavior_fsm_.mapping(false)) {
+            LOG_WARN("[Mapping] nav-upload-successful completed but state={}",
+                     RobotFsm::name(behavior_fsm_.snapshot().motion_mode));
+        }
+        publish_fsm_state("nav-upload-successful", "success");
+    } catch (const std::exception& e) {
+        fail(std::string("nav-upload-successful exception: ") + e.what());
+    } catch (...) {
+        fail("nav-upload-successful unknown exception");
     }
-
-    if (parts.size() < 2) {
-        LOG_ERROR("invalid storage_path: %s", storage_path.c_str());
-        return;
-    }
-
-    std::string address = parts[0];      // 坚米
-    std::string display_name = parts[1]; // 三楼
-
-    std::cout << "address: " << address << std::endl;
-    std::cout << "display_name: " << display_name << std::endl;
-
-    fs::copy(
-        "/home/jianmi/g_build_map/gloabl_map.pcd",
-        fs::path("/home/jianmi/g_nav_map") / "gloabl_map.pcd",
-        fs::copy_options::overwrite_existing
-    );
-
-    fs::copy(
-        "/home/jianmi/g_build_map/gloabl_map.pickle",
-        fs::path("/home/jianmi/g_nav_map") / "gloabl_map.pickle",
-        fs::copy_options::overwrite_existing
-    );
-
-    std::vector<std::string> download_map_files = {"navmap.pcd"};
-    map_manager_->download_and_deploy(address, display_name, download_map_files, map_dir_);
-
-    std::string sh_2 = "/home/jianmi/catkin_pct/Scripts/map_process2.sh"; // lightweight_map.npy 和 navmap.pickle
-    std::cout << "map_process2.sh 执行成功... " << std::endl;
-
-    // 执行脚本
-    int ret1 = system(sh_2.c_str());
-    if (ret1 != 0) {
-        LOG_ERROR("22.sh execute failed");
-        return;
-    }
-
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-    std::vector<std::string> final_file = {"lightweight_map.npy", "navmap.pickle"};
-    map_manager_->upload_map_sh(device_id_, address, display_name, map_dir_, final_file, storage_path, uuid);
-    std::cout << "上传 lightweight_map.npy 和 navmap.pickle 文件成功... " << std::endl;
-
-    fs::path uuid_dir =
-        fs::path("/home/jianmi/map_manager_local")
-        / uuid;
-
-    fs::create_directories(uuid_dir);
-    // std::cout << "uuid_dir ---> " << uuid_dir << std::endl;
-
-    // 复制文件到 map_manager_local 文件夹下
-    fs::copy(
-        "/home/jianmi/g_nav_map/lightweight_map.npy",
-        uuid_dir / "lightweight_map.npy",
-        fs::copy_options::overwrite_existing
-    );
-
-    fs::copy(
-        "/home/jianmi/g_nav_map/navmap.pickle",
-        uuid_dir / "navmap.pickle",
-        fs::copy_options::overwrite_existing
-    );
-
-    fs::copy(
-        "/home/jianmi/g_nav_map/gloabl_map.pcd",
-        uuid_dir / "gloabl_map.pcd",
-        fs::copy_options::overwrite_existing
-    );
-
-    fs::copy(
-        "/home/jianmi/g_nav_map/navmap.pcd",
-        uuid_dir / "navmap.pcd",
-        fs::copy_options::overwrite_existing
-    );
-
-    send_to_cloud(json{
-        {"type", "nav-upload-successful-end"},
-        {"localTime", getTimeNow()},
-        {"code", 0},
-        {"message", "建图流程已结束, 可以进行导航操作... "}
-    }.dump());
-    behavior_fsm_.mapping(false);
-    publish_fsm_state("nav-upload-successful", "success");
-
 }
 
 void CommandExecutor::exec_upload_cmd(const json& data) {
-    std::string clear_cmd = "rm -rf " + map_dir_ + "/*";
+    std::string clear_cmd = "rm -rf -- " + shell_quote(map_dir_) + "/*";
     system(clear_cmd.c_str());
     std::cout << "clear_cmd ... success " << clear_cmd << std::endl;
     
@@ -2674,7 +3269,31 @@ void CommandExecutor::handle_stop_and_uploadmap(const json& data) {
         return;
     }
 
-    launch_background_task(std::thread(&CommandExecutor::stop_and_uploadmap_async, this, data));
+    launch_background_task(
+        [this, data]() {
+            stop_and_uploadmap_async(data);
+        },
+        [this](const std::string& e) {
+            LOG_ERROR("[Mapping] stop_and_uploadmap background exception: {}", e);
+            if (mapping_handle_ && mapping_handle_->is_running()) {
+                // Keep Mapping so the operator can retry stop_and_uploadmap.
+                behavior_fsm_.mapping(true);
+            } else {
+                behavior_fsm_.mapping_failed("stop_and_uploadmap exception: " + e);
+            }
+            publish_fsm_state("stop_and_uploadmap", "failed", e);
+            try {
+                send_to_cloud(json{
+                    {"type", "stop_and_uploadmap"},
+                    {"status", "failed"},
+                    {"code", 1},
+                    {"message", e},
+                    {"localTime", getTimeNow()}
+                }.dump());
+            } catch (...) {
+            }
+            finish_command("stop_and_uploadmap");
+        });
 }
 
 void CommandExecutor::stop_and_uploadmap_async(json data) {
@@ -2826,7 +3445,7 @@ void CommandExecutor::exec_rosservice_cmd(const std::string& type, const std::st
     ROS_INFO("Execute CMD:");
     ROS_INFO("%s", final_cmd.c_str());
 
-    launch_background_task(std::thread([this, final_cmd, type, service_name, generation]() {
+    launch_background_task([this, final_cmd, type, service_name, generation]() {
 
         std::lock_guard<std::recursive_mutex> behavior_lock(behavior_execution_mutex_);
         if (!behavior_fsm_.navigation_current(generation)) return;
@@ -2870,5 +3489,9 @@ void CommandExecutor::exec_rosservice_cmd(const std::string& type, const std::st
         }
         publish_fsm_state(type, success ? "success" : "failed");
 
-    }));
+    }, [this, type](const std::string& e) {
+        LOG_ERROR("[Service] {} background task failed: {}", type, e);
+        finish_command(type);
+        publish_fsm_state(type, "failed", e);
+    });
 }

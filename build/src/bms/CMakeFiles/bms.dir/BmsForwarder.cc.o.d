@@ -142,7 +142,23 @@ src/bms/CMakeFiles/bms.dir/BmsForwarder.cc.o: \
  /usr/include/c++/9/bits/atomic_lockfree_defines.h \
  /usr/include/c++/9/backward/auto_ptr.h \
  /usr/include/c++/9/pstl/glue_memory_defs.h \
- /usr/include/c++/9/pstl/execution_defs.h \
+ /usr/include/c++/9/pstl/execution_defs.h /usr/include/c++/9/functional \
+ /usr/include/c++/9/bits/std_function.h /usr/include/c++/9/unordered_map \
+ /usr/include/c++/9/bits/hashtable.h \
+ /usr/include/c++/9/bits/hashtable_policy.h \
+ /usr/include/c++/9/bits/node_handle.h /usr/include/c++/9/optional \
+ /usr/include/c++/9/bits/enable_special_members.h \
+ /usr/include/c++/9/bits/unordered_map.h \
+ /usr/include/c++/9/bits/erase_if.h /usr/include/c++/9/vector \
+ /usr/include/c++/9/bits/stl_vector.h \
+ /usr/include/c++/9/bits/stl_bvector.h /usr/include/c++/9/bits/vector.tcc \
+ /usr/include/c++/9/bits/stl_algo.h \
+ /usr/include/c++/9/bits/algorithmfwd.h \
+ /usr/include/c++/9/bits/stl_heap.h \
+ /usr/include/c++/9/bits/uniform_int_dist.h \
+ /home/jianmi/grebotMap_jm/src/bms/BatteryProvider.h \
+ /usr/include/c++/9/chrono /usr/include/c++/9/ratio \
+ /usr/include/c++/9/ctime /usr/include/c++/9/bits/parse_numbers.h \
  /opt/ros/noetic/include/ros/ros.h /opt/ros/noetic/include/ros/time.h \
  /opt/ros/noetic/include/ros/platform.h /usr/include/c++/9/stdlib.h \
  /usr/include/c++/9/iostream /usr/include/c++/9/ostream \
@@ -223,26 +239,14 @@ src/bms/CMakeFiles/bms.dir/BmsForwarder.cc.o: \
  /usr/include/boost/config/workaround.hpp \
  /usr/include/boost/type_traits/is_integral.hpp \
  /usr/include/boost/type_traits/integral_constant.hpp \
- /usr/include/c++/9/algorithm /usr/include/c++/9/bits/stl_algo.h \
- /usr/include/c++/9/bits/algorithmfwd.h \
- /usr/include/c++/9/bits/stl_heap.h \
- /usr/include/c++/9/bits/uniform_int_dist.h \
+ /usr/include/c++/9/algorithm \
  /usr/include/c++/9/pstl/glue_algorithm_defs.h \
- /usr/include/c++/9/functional /usr/include/c++/9/bits/std_function.h \
- /usr/include/c++/9/unordered_map /usr/include/c++/9/bits/hashtable.h \
- /usr/include/c++/9/bits/hashtable_policy.h \
- /usr/include/c++/9/bits/node_handle.h /usr/include/c++/9/optional \
- /usr/include/c++/9/bits/enable_special_members.h \
- /usr/include/c++/9/bits/unordered_map.h \
- /usr/include/c++/9/bits/erase_if.h /usr/include/c++/9/vector \
- /usr/include/c++/9/bits/stl_vector.h \
- /usr/include/c++/9/bits/stl_bvector.h /usr/include/c++/9/bits/vector.tcc \
  /usr/include/boost/config/no_tr1/cmath.hpp /usr/include/c++/9/cfloat \
  /usr/lib/gcc/aarch64-linux-gnu/9/include/float.h \
  /usr/include/boost/math/tools/user.hpp \
  /usr/include/boost/math/policies/error_handling.hpp \
  /usr/include/c++/9/iomanip /usr/include/c++/9/locale \
- /usr/include/c++/9/bits/locale_facets_nonio.h /usr/include/c++/9/ctime \
+ /usr/include/c++/9/bits/locale_facets_nonio.h \
  /usr/include/aarch64-linux-gnu/c++/9/bits/time_members.h \
  /usr/include/aarch64-linux-gnu/c++/9/bits/messages_members.h \
  /usr/include/libintl.h /usr/include/c++/9/bits/codecvt.h \
@@ -751,9 +755,7 @@ src/bms/CMakeFiles/bms.dir/BmsForwarder.cc.o: \
  /usr/include/boost/system/detail/generic_category.hpp \
  /usr/include/boost/system/detail/system_category_posix.hpp \
  /usr/include/boost/system/detail/std_interoperability.hpp \
- /usr/include/c++/9/mutex /usr/include/c++/9/chrono \
- /usr/include/c++/9/ratio /usr/include/c++/9/bits/parse_numbers.h \
- /usr/include/c++/9/bits/std_mutex.h \
+ /usr/include/c++/9/mutex /usr/include/c++/9/bits/std_mutex.h \
  /usr/include/c++/9/bits/unique_lock.h \
  /usr/include/boost/config/abi_prefix.hpp \
  /usr/include/boost/config/abi_suffix.hpp \
@@ -1117,7 +1119,7 @@ src/bms/CMakeFiles/bms.dir/BmsForwarder.cc.o: \
  /opt/ros/noetic/include/ros/this_node.h \
  /opt/ros/noetic/include/ros/param.h /opt/ros/noetic/include/ros/topic.h \
  /opt/ros/noetic/include/ros/node_handle.h \
- /home/jianmi/grebotMap_jm/include/../include/common/json.hpp \
+ /home/jianmi/grebotMap_jm/include/common/json.hpp \
  /usr/include/c++/9/forward_list /usr/include/c++/9/bits/forward_list.h \
  /usr/include/c++/9/bits/forward_list.tcc /usr/include/c++/9/valarray \
  /usr/include/c++/9/bits/valarray_array.h \
@@ -1133,6 +1135,7 @@ src/bms/CMakeFiles/bms.dir/BmsForwarder.cc.o: \
  /usr/include/c++/9/bits/fs_dir.h /usr/include/c++/9/bits/fs_ops.h \
  /usr/include/c++/9/numeric /usr/include/c++/9/bits/stl_numeric.h \
  /usr/include/c++/9/pstl/glue_numeric_defs.h /usr/include/c++/9/any \
+ /home/jianmi/grebotMap_jm/include/../include/common/json.hpp \
  /usr/include/boost/asio/executor_work_guard.hpp \
  /usr/include/boost/asio/detail/config.hpp /usr/include/linux/version.h \
  /usr/include/boost/asio/associated_executor.hpp \
@@ -1678,6 +1681,4 @@ src/bms/CMakeFiles/bms.dir/BmsForwarder.cc.o: \
  /usr/include/boost/asio/ssl/detail/read_op.hpp \
  /usr/include/boost/asio/ssl/detail/shutdown_op.hpp \
  /usr/include/boost/asio/ssl/detail/write_op.hpp \
- /usr/local/include/websocketpp/config/asio_no_tls.hpp \
- /home/jianmi/catkin_ws/devel/include/robot_gateway/M20BmsState.h \
- /opt/ros/noetic/include/ros/message_operations.h
+ /usr/local/include/websocketpp/config/asio_no_tls.hpp

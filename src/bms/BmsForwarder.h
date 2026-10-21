@@ -4,13 +4,11 @@
 #include <string>
 #include <functional>
 
-#include <ros/ros.h>
+#include "BatteryProvider.h"
 
 class BmsForwarder {
 public:
-    BmsForwarder(ros::NodeHandle& nh, std::string websocket_url,
-                 std::string robot_id, std::string bms_topic,
-                 std::string robot_model = "M20");
+    BmsForwarder(std::string websocket_url, std::string robot_id);
     ~BmsForwarder();
 
     BmsForwarder(const BmsForwarder&) = delete;
@@ -18,8 +16,7 @@ public:
 
     bool start();
     void stop();
-    // Configure before start(). Called on the ROS subscriber thread.
-    void setBatteryCallback(std::function<void(bool, double)> callback);
+    void updateBattery(const BatterySnapshot& snapshot);
 
 private:
     class Impl;

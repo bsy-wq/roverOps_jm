@@ -3,6 +3,7 @@
 
 src/motionControl/CMakeFiles/motionControl.dir/motionHandle.cc.o: ../include/common/json.hpp
 src/motionControl/CMakeFiles/motionControl.dir/motionHandle.cc.o: ../include/common/log_manager.h
+src/motionControl/CMakeFiles/motionControl.dir/motionHandle.cc.o: ../include/common/utils.h
 src/motionControl/CMakeFiles/motionControl.dir/motionHandle.cc.o: /home/jianmi/catkin_ws/devel/include/robot_gateway/M20V06RobotState.h
 src/motionControl/CMakeFiles/motionControl.dir/motionHandle.cc.o: ../src/motionControl/motionHandle.cc
 src/motionControl/CMakeFiles/motionControl.dir/motionHandle.cc.o: ../src/motionControl/motionHandle.h

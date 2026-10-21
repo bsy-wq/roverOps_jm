@@ -1,12 +1,15 @@
 #pragma once
 
 #include <yaml-cpp/yaml.h>
+#include <algorithm>
+#include <cctype>
 #include <string.h>
 #include <stdexcept>
 
 struct Config {
 
     std::string model;
+    std::string motion_control_version;
 
     std::string robot_id;
 
@@ -40,6 +43,13 @@ Config loadConfig(const std::string& path) {
 
     config.robot_id = yaml["robot"]["sn"].as<std::string>();
     config.model = yaml["robot"]["model"].as<std::string>();
+    config.motion_control_version = yaml["robot"]["motion_control_version"].as<std::string>();
+    std::transform(config.motion_control_version.begin(), config.motion_control_version.end(),
+                   config.motion_control_version.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    if (config.motion_control_version != "new" && config.motion_control_version != "old") {
+        throw std::runtime_error("robot.motion_control_version must be 'new' or 'old'");
+    }
 
     config.http_ip = yaml["network"]["http"]["ip"].as<std::string>();
     config.http_port = yaml["network"]["http"]["port"].as<int>();

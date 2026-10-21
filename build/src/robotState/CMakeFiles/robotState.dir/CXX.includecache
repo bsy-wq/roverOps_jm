@@ -402,21 +402,19 @@ any
 string_view
 -
 
-/home/jianmi/catkin_ws/devel/include/robot_gateway/M20BmsState.h
-string
+../src/bms/BatteryProvider.h
+chrono
 -
-vector
+functional
 -
 memory
 -
-ros/types.h
+string
 -
-ros/serialization.h
+ros/ros.h
 -
-ros/builtin_message_traits.h
--
-ros/message_operations.h
--
+common/json.hpp
+../src/bms/common/json.hpp
 
 /home/jianmi/grebotMap_jm/src/robotState/robotState.cc
 robotState.h
@@ -437,8 +435,8 @@ ros/ros.h
 -
 common/json.hpp
 /home/jianmi/grebotMap_jm/src/robotState/common/json.hpp
-robot_gateway/M20BmsState.h
--
+bms/BatteryProvider.h
+/home/jianmi/grebotMap_jm/src/robotState/bms/BatteryProvider.h
 std_msgs/String.h
 -
 

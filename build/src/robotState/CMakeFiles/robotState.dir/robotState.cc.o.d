@@ -1136,6 +1136,6 @@ src/robotState/CMakeFiles/robotState.dir/robotState.cc.o: \
  /usr/include/c++/9/bits/fs_dir.h /usr/include/c++/9/bits/fs_ops.h \
  /usr/include/c++/9/numeric /usr/include/c++/9/bits/stl_numeric.h \
  /usr/include/c++/9/pstl/glue_numeric_defs.h /usr/include/c++/9/any \
- /home/jianmi/catkin_ws/devel/include/robot_gateway/M20BmsState.h \
- /opt/ros/noetic/include/ros/message_operations.h \
- /opt/ros/noetic/include/std_msgs/String.h
+ /home/jianmi/grebotMap_jm/src/bms/BatteryProvider.h \
+ /opt/ros/noetic/include/std_msgs/String.h \
+ /opt/ros/noetic/include/ros/message_operations.h

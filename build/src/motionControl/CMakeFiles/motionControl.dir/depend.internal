@@ -4,6 +4,7 @@
 src/motionControl/CMakeFiles/motionControl.dir/motionHandle.cc.o
  ../include/common/json.hpp
  ../include/common/log_manager.h
+ ../include/common/utils.h
  /home/jianmi/catkin_ws/devel/include/robot_gateway/M20V06RobotState.h
  /home/jianmi/grebotMap_jm/src/motionControl/motionHandle.cc
  /home/jianmi/grebotMap_jm/src/motionControl/motionHandle.h

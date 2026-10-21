@@ -2,6 +2,7 @@
 
 #include <string>
 #include <functional>
+#include <atomic>
 #include "../include/common/json.hpp"
 
 using json = nlohmann::json;
@@ -14,13 +15,17 @@ public:
 
     Follow(std::string device_id, 
            SendToCloud send_to_cloud,
-           std::string base_url = "http://127.0.0.1:8088");
+           std::string base_url = "http://122.192.33.182:2802");
 
-    void handle_follow_function(const json& data);
+    bool handle_follow_function(const json& data);
+    bool is_running() const { return running_.load(); }
+    bool is_estopped() const { return estopped_.load(); }
 
 private:
     std::string device_id_;
     SendToCloud send_to_cloud_;
     std::string base_url_;
+    std::atomic<bool> running_{false};
+    std::atomic<bool> estopped_{false};
 
 };

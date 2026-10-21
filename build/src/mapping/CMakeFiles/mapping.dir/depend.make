@@ -5,6 +5,7 @@ src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../include/common/json.hpp
 src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../include/common/httplib.h
 src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../include/common/json.hpp
 src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../include/common/log_manager.h
+src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../include/common/process_runner.h
 src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../include/common/utils.h
 src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../include/http_map_uploader.h
 src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../include/manager.h

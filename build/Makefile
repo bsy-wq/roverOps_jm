@@ -78,6 +78,17 @@ list_install_components/fast: list_install_components
 
 .PHONY : list_install_components/fast
 
+# Special rule for the target rebuild_cache
+rebuild_cache:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake to regenerate build system..."
+	/usr/bin/cmake -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
+.PHONY : rebuild_cache
+
+# Special rule for the target rebuild_cache
+rebuild_cache/fast: rebuild_cache
+
+.PHONY : rebuild_cache/fast
+
 # Special rule for the target install/local
 install/local: preinstall
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing only the local directory..."
@@ -101,17 +112,6 @@ install/fast: preinstall/fast
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Install the project..."
 	/usr/bin/cmake -P cmake_install.cmake
 .PHONY : install/fast
-
-# Special rule for the target rebuild_cache
-rebuild_cache:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake to regenerate build system..."
-	/usr/bin/cmake -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
-.PHONY : rebuild_cache
-
-# Special rule for the target rebuild_cache
-rebuild_cache/fast: rebuild_cache
-
-.PHONY : rebuild_cache/fast
 
 # Special rule for the target test
 test:
@@ -805,6 +805,19 @@ sensor_msgs_generate_messages_lisp/fast:
 .PHONY : sensor_msgs_generate_messages_lisp/fast
 
 #=============================================================================
+# Target rules for targets named sensor_msgs_generate_messages_nodejs
+
+# Build rule for target.
+sensor_msgs_generate_messages_nodejs: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 sensor_msgs_generate_messages_nodejs
+.PHONY : sensor_msgs_generate_messages_nodejs
+
+# fast build rule for target.
+sensor_msgs_generate_messages_nodejs/fast:
+	$(MAKE) -f CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build
+.PHONY : sensor_msgs_generate_messages_nodejs/fast
+
+#=============================================================================
 # Target rules for targets named nav_msgs_generate_messages_py
 
 # Build rule for target.
@@ -829,19 +842,6 @@ tf_generate_messages_lisp: cmake_check_build_system
 tf_generate_messages_lisp/fast:
 	$(MAKE) -f CMakeFiles/tf_generate_messages_lisp.dir/build.make CMakeFiles/tf_generate_messages_lisp.dir/build
 .PHONY : tf_generate_messages_lisp/fast
-
-#=============================================================================
-# Target rules for targets named sensor_msgs_generate_messages_nodejs
-
-# Build rule for target.
-sensor_msgs_generate_messages_nodejs: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 sensor_msgs_generate_messages_nodejs
-.PHONY : sensor_msgs_generate_messages_nodejs
-
-# fast build rule for target.
-sensor_msgs_generate_messages_nodejs/fast:
-	$(MAKE) -f CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build
-.PHONY : sensor_msgs_generate_messages_nodejs/fast
 
 #=============================================================================
 # Target rules for targets named tf_generate_messages_nodejs
@@ -870,6 +870,19 @@ actionlib_generate_messages_nodejs/fast:
 .PHONY : actionlib_generate_messages_nodejs/fast
 
 #=============================================================================
+# Target rules for targets named tf2_msgs_generate_messages_nodejs
+
+# Build rule for target.
+tf2_msgs_generate_messages_nodejs: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 tf2_msgs_generate_messages_nodejs
+.PHONY : tf2_msgs_generate_messages_nodejs
+
+# fast build rule for target.
+tf2_msgs_generate_messages_nodejs/fast:
+	$(MAKE) -f CMakeFiles/tf2_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/tf2_msgs_generate_messages_nodejs.dir/build
+.PHONY : tf2_msgs_generate_messages_nodejs/fast
+
+#=============================================================================
 # Target rules for targets named tf2_msgs_generate_messages_lisp
 
 # Build rule for target.
@@ -883,17 +896,30 @@ tf2_msgs_generate_messages_lisp/fast:
 .PHONY : tf2_msgs_generate_messages_lisp/fast
 
 #=============================================================================
-# Target rules for targets named tf2_msgs_generate_messages_nodejs
+# Target rules for targets named battery_provider_integration_test
 
 # Build rule for target.
-tf2_msgs_generate_messages_nodejs: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 tf2_msgs_generate_messages_nodejs
-.PHONY : tf2_msgs_generate_messages_nodejs
+battery_provider_integration_test: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 battery_provider_integration_test
+.PHONY : battery_provider_integration_test
 
 # fast build rule for target.
-tf2_msgs_generate_messages_nodejs/fast:
-	$(MAKE) -f CMakeFiles/tf2_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/tf2_msgs_generate_messages_nodejs.dir/build
-.PHONY : tf2_msgs_generate_messages_nodejs/fast
+battery_provider_integration_test/fast:
+	$(MAKE) -f CMakeFiles/battery_provider_integration_test.dir/build.make CMakeFiles/battery_provider_integration_test.dir/build
+.PHONY : battery_provider_integration_test/fast
+
+#=============================================================================
+# Target rules for targets named robot_fsm_priority_test
+
+# Build rule for target.
+robot_fsm_priority_test: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 robot_fsm_priority_test
+.PHONY : robot_fsm_priority_test
+
+# fast build rule for target.
+robot_fsm_priority_test/fast:
+	$(MAKE) -f CMakeFiles/robot_fsm_priority_test.dir/build.make CMakeFiles/robot_fsm_priority_test.dir/build
+.PHONY : robot_fsm_priority_test/fast
 
 #=============================================================================
 # Target rules for targets named gmock_main
@@ -1118,6 +1144,87 @@ src/aiRecognition/AiRecognitionAckHandler.cc.s:
 	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.s
 .PHONY : src/aiRecognition/AiRecognitionAckHandler.cc.s
 
+src/handlers/DeviceHandler.o: src/handlers/DeviceHandler.cc.o
+
+.PHONY : src/handlers/DeviceHandler.o
+
+# target to build an object file
+src/handlers/DeviceHandler.cc.o:
+	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.o
+.PHONY : src/handlers/DeviceHandler.cc.o
+
+src/handlers/DeviceHandler.i: src/handlers/DeviceHandler.cc.i
+
+.PHONY : src/handlers/DeviceHandler.i
+
+# target to preprocess a source file
+src/handlers/DeviceHandler.cc.i:
+	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.i
+.PHONY : src/handlers/DeviceHandler.cc.i
+
+src/handlers/DeviceHandler.s: src/handlers/DeviceHandler.cc.s
+
+.PHONY : src/handlers/DeviceHandler.s
+
+# target to generate assembly for a file
+src/handlers/DeviceHandler.cc.s:
+	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.s
+.PHONY : src/handlers/DeviceHandler.cc.s
+
+src/handlers/MapWorkflowHandler.o: src/handlers/MapWorkflowHandler.cc.o
+
+.PHONY : src/handlers/MapWorkflowHandler.o
+
+# target to build an object file
+src/handlers/MapWorkflowHandler.cc.o:
+	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.o
+.PHONY : src/handlers/MapWorkflowHandler.cc.o
+
+src/handlers/MapWorkflowHandler.i: src/handlers/MapWorkflowHandler.cc.i
+
+.PHONY : src/handlers/MapWorkflowHandler.i
+
+# target to preprocess a source file
+src/handlers/MapWorkflowHandler.cc.i:
+	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.i
+.PHONY : src/handlers/MapWorkflowHandler.cc.i
+
+src/handlers/MapWorkflowHandler.s: src/handlers/MapWorkflowHandler.cc.s
+
+.PHONY : src/handlers/MapWorkflowHandler.s
+
+# target to generate assembly for a file
+src/handlers/MapWorkflowHandler.cc.s:
+	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.s
+.PHONY : src/handlers/MapWorkflowHandler.cc.s
+
+src/handlers/NavigationLifecycleHandler.o: src/handlers/NavigationLifecycleHandler.cc.o
+
+.PHONY : src/handlers/NavigationLifecycleHandler.o
+
+# target to build an object file
+src/handlers/NavigationLifecycleHandler.cc.o:
+	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.o
+.PHONY : src/handlers/NavigationLifecycleHandler.cc.o
+
+src/handlers/NavigationLifecycleHandler.i: src/handlers/NavigationLifecycleHandler.cc.i
+
+.PHONY : src/handlers/NavigationLifecycleHandler.i
+
+# target to preprocess a source file
+src/handlers/NavigationLifecycleHandler.cc.i:
+	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.i
+.PHONY : src/handlers/NavigationLifecycleHandler.cc.i
+
+src/handlers/NavigationLifecycleHandler.s: src/handlers/NavigationLifecycleHandler.cc.s
+
+.PHONY : src/handlers/NavigationLifecycleHandler.s
+
+# target to generate assembly for a file
+src/handlers/NavigationLifecycleHandler.cc.s:
+	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.s
+.PHONY : src/handlers/NavigationLifecycleHandler.cc.s
+
 src/localWebsocket/LocalWebsocketServer.o: src/localWebsocket/LocalWebsocketServer.cc.o
 
 .PHONY : src/localWebsocket/LocalWebsocketServer.o
@@ -1172,6 +1279,60 @@ src/main.cc.s:
 	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/src/main.cc.s
 .PHONY : src/main.cc.s
 
+tests/battery_integration_test.o: tests/battery_integration_test.cc.o
+
+.PHONY : tests/battery_integration_test.o
+
+# target to build an object file
+tests/battery_integration_test.cc.o:
+	$(MAKE) -f CMakeFiles/battery_provider_integration_test.dir/build.make CMakeFiles/battery_provider_integration_test.dir/tests/battery_integration_test.cc.o
+.PHONY : tests/battery_integration_test.cc.o
+
+tests/battery_integration_test.i: tests/battery_integration_test.cc.i
+
+.PHONY : tests/battery_integration_test.i
+
+# target to preprocess a source file
+tests/battery_integration_test.cc.i:
+	$(MAKE) -f CMakeFiles/battery_provider_integration_test.dir/build.make CMakeFiles/battery_provider_integration_test.dir/tests/battery_integration_test.cc.i
+.PHONY : tests/battery_integration_test.cc.i
+
+tests/battery_integration_test.s: tests/battery_integration_test.cc.s
+
+.PHONY : tests/battery_integration_test.s
+
+# target to generate assembly for a file
+tests/battery_integration_test.cc.s:
+	$(MAKE) -f CMakeFiles/battery_provider_integration_test.dir/build.make CMakeFiles/battery_provider_integration_test.dir/tests/battery_integration_test.cc.s
+.PHONY : tests/battery_integration_test.cc.s
+
+tests/robot_fsm_priority_test.o: tests/robot_fsm_priority_test.cc.o
+
+.PHONY : tests/robot_fsm_priority_test.o
+
+# target to build an object file
+tests/robot_fsm_priority_test.cc.o:
+	$(MAKE) -f CMakeFiles/robot_fsm_priority_test.dir/build.make CMakeFiles/robot_fsm_priority_test.dir/tests/robot_fsm_priority_test.cc.o
+.PHONY : tests/robot_fsm_priority_test.cc.o
+
+tests/robot_fsm_priority_test.i: tests/robot_fsm_priority_test.cc.i
+
+.PHONY : tests/robot_fsm_priority_test.i
+
+# target to preprocess a source file
+tests/robot_fsm_priority_test.cc.i:
+	$(MAKE) -f CMakeFiles/robot_fsm_priority_test.dir/build.make CMakeFiles/robot_fsm_priority_test.dir/tests/robot_fsm_priority_test.cc.i
+.PHONY : tests/robot_fsm_priority_test.cc.i
+
+tests/robot_fsm_priority_test.s: tests/robot_fsm_priority_test.cc.s
+
+.PHONY : tests/robot_fsm_priority_test.s
+
+# target to generate assembly for a file
+tests/robot_fsm_priority_test.cc.s:
+	$(MAKE) -f CMakeFiles/robot_fsm_priority_test.dir/build.make CMakeFiles/robot_fsm_priority_test.dir/tests/robot_fsm_priority_test.cc.s
+.PHONY : tests/robot_fsm_priority_test.cc.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -1180,6 +1341,7 @@ help:
 	@echo "... depend"
 	@echo "... install/strip"
 	@echo "... list_install_components"
+	@echo "... rebuild_cache"
 	@echo "... install/local"
 	@echo "... nav_msgs_generate_messages_eus"
 	@echo "... geometry_msgs_generate_messages_eus"
@@ -1213,7 +1375,6 @@ help:
 	@echo "... roscpp_generate_messages_eus"
 	@echo "... sensor_msgs_generate_messages_py"
 	@echo "... tf2_msgs_generate_messages_eus"
-	@echo "... rebuild_cache"
 	@echo "... geometry_msgs_generate_messages_nodejs"
 	@echo "... geometry_msgs_generate_messages_cpp"
 	@echo "... tf2_msgs_generate_messages_py"
@@ -1233,14 +1394,16 @@ help:
 	@echo "... sensor_msgs_generate_messages_cpp"
 	@echo "... sensor_msgs_generate_messages_eus"
 	@echo "... sensor_msgs_generate_messages_lisp"
+	@echo "... edit_cache"
+	@echo "... sensor_msgs_generate_messages_nodejs"
 	@echo "... nav_msgs_generate_messages_py"
 	@echo "... tf_generate_messages_lisp"
-	@echo "... sensor_msgs_generate_messages_nodejs"
-	@echo "... edit_cache"
 	@echo "... tf_generate_messages_nodejs"
 	@echo "... actionlib_generate_messages_nodejs"
-	@echo "... tf2_msgs_generate_messages_lisp"
 	@echo "... tf2_msgs_generate_messages_nodejs"
+	@echo "... tf2_msgs_generate_messages_lisp"
+	@echo "... battery_provider_integration_test"
+	@echo "... robot_fsm_priority_test"
 	@echo "... gmock_main"
 	@echo "... gmock"
 	@echo "... gtest_main"
@@ -1260,12 +1423,27 @@ help:
 	@echo "... src/aiRecognition/AiRecognitionAckHandler.o"
 	@echo "... src/aiRecognition/AiRecognitionAckHandler.i"
 	@echo "... src/aiRecognition/AiRecognitionAckHandler.s"
+	@echo "... src/handlers/DeviceHandler.o"
+	@echo "... src/handlers/DeviceHandler.i"
+	@echo "... src/handlers/DeviceHandler.s"
+	@echo "... src/handlers/MapWorkflowHandler.o"
+	@echo "... src/handlers/MapWorkflowHandler.i"
+	@echo "... src/handlers/MapWorkflowHandler.s"
+	@echo "... src/handlers/NavigationLifecycleHandler.o"
+	@echo "... src/handlers/NavigationLifecycleHandler.i"
+	@echo "... src/handlers/NavigationLifecycleHandler.s"
 	@echo "... src/localWebsocket/LocalWebsocketServer.o"
 	@echo "... src/localWebsocket/LocalWebsocketServer.i"
 	@echo "... src/localWebsocket/LocalWebsocketServer.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... tests/battery_integration_test.o"
+	@echo "... tests/battery_integration_test.i"
+	@echo "... tests/battery_integration_test.s"
+	@echo "... tests/robot_fsm_priority_test.o"
+	@echo "... tests/robot_fsm_priority_test.i"
+	@echo "... tests/robot_fsm_priority_test.s"
 .PHONY : help
 
 

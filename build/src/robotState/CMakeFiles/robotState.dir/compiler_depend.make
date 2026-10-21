@@ -1273,9 +1273,9 @@ src/robotState/CMakeFiles/robotState.dir/robotState.cc.o: ../src/robotState/robo
   /usr/include/c++/9/bits/stl_numeric.h \
   /usr/include/c++/9/pstl/glue_numeric_defs.h \
   /usr/include/c++/9/any \
-  /home/jianmi/catkin_ws/devel/include/robot_gateway/M20BmsState.h \
-  /opt/ros/noetic/include/ros/message_operations.h \
-  /opt/ros/noetic/include/std_msgs/String.h
+  ../src/bms/BatteryProvider.h \
+  /opt/ros/noetic/include/std_msgs/String.h \
+  /opt/ros/noetic/include/ros/message_operations.h
 
 
 /opt/ros/noetic/include/ros/message_operations.h:
@@ -1991,6 +1991,8 @@ src/robotState/CMakeFiles/robotState.dir/robotState.cc.o: ../src/robotState/robo
 /usr/include/boost/preprocessor/control/iif.hpp:
 
 /usr/include/boost/mpl/vector/aux_/vector0.hpp:
+
+../src/bms/BatteryProvider.h:
 
 /usr/include/c++/9/bits/locale_conv.h:
 
@@ -2975,8 +2977,6 @@ src/robotState/CMakeFiles/robotState.dir/robotState.cc.o: ../src/robotState/robo
 /usr/include/boost/predef/compiler/compaq.h:
 
 /usr/include/boost/mpl/aux_/preprocessed/gcc/or.hpp:
-
-/home/jianmi/catkin_ws/devel/include/robot_gateway/M20BmsState.h:
 
 /usr/include/c++/9/cxxabi.h:
 

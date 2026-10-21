@@ -1,16 +1,17 @@
 app:
   name: "robot_dog"
   environment: "ceshi"
-  version: "M20.01.02.20260923 B"
+  version: "M20.01.03.20261020 B"
 
 robot:
-  sn: "M20-P1-bsy"
+  sn: "M20-P1-test"
   model: "M20" # M20 / A10
+  motion_control_version: "old" # new / old
 
 network:
   http:
-    ip: "112.2.6.99"
-    port: 8503
+    ip: "122.192.33.182"
+    port: 2800
 
   gateway:
     host: "0.0.0.0" # websocket 修改ip
@@ -27,7 +28,7 @@ udp:
 websocket:
   ip: "0.0.0.0"
   port: 9002
-  server_equipment: "/robot/ws/superstructure/equirpment"
+  server_equipment: "/robot/ws/superstructure/equipment"
   server_test: "/robot/ws/bsy"
 
 parameter:

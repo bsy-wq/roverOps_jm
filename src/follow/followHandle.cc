@@ -31,7 +31,7 @@ Follow::Follow(std::string device_id, SendToCloud send_to_cloud, std::string bas
     }
 }
 
-void Follow::handle_follow_function(const json& request)
+bool Follow::handle_follow_function(const json& request)
 {
     json response = json::object();
     try {
@@ -116,6 +116,38 @@ void Follow::handle_follow_function(const json& request)
         response["ok"] = false;
         response["msg"] = error.what();
     }
+    if (response.contains("ok") && response["ok"].is_boolean() &&
+        response["ok"].get<bool>() && request.is_object() &&
+        request.contains("cmd") && request["cmd"].is_string()) {
+        const std::string command = request["cmd"].get<std::string>();
+        if (command == "start_follow") {
+            running_.store(true);
+            estopped_.store(false);
+        } else if (command == "stop_follow" || command == "estop_follow") {
+            running_.store(false);
+            estopped_.store(command == "estop_follow");
+        }
+        if (command == "get_follow" && response.contains("data") &&
+            response["data"].is_object()) {
+            const auto& state = response["data"];
+            if (state.contains("running") && state["running"].is_boolean()) {
+                running_.store(state["running"].get<bool>());
+            }
+            if (state.contains("state") && state["state"].is_string()) {
+                const std::string name = state["state"].get<std::string>();
+                if (name == "estop" || name == "estopped") {
+                    running_.store(false);
+                    estopped_.store(true);
+                } else if (name == "idle" || name == "stopped") {
+                    running_.store(false);
+                    estopped_.store(false);
+                } else if (name == "searching" || name == "following") {
+                    running_.store(true);
+                    estopped_.store(false);
+                }
+            }
+        }
+    }
     // Preserve request metadata for Web response correlation.
     response["type"] = "follow";
     response["device_id"] = device_id_;
@@ -127,4 +159,6 @@ void Follow::handle_follow_function(const json& request)
         }
     }
     send_to_cloud_(response.dump());
+    return response.contains("ok") && response["ok"].is_boolean() &&
+           response["ok"].get<bool>();
 }

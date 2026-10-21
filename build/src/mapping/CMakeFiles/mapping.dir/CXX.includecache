@@ -983,6 +983,8 @@ string_view
 /home/jianmi/grebotMap_jm/include/common/log_manager.h
 spdlog/spdlog.h
 -
+utils.h
+/home/jianmi/grebotMap_jm/include/common/utils.h
 spdlog/sinks/basic_file_sink.h
 -
 spdlog/sinks/daily_file_sink.h
@@ -998,6 +1000,24 @@ algorithm
 iostream
 -
 utility
+-
+
+/home/jianmi/grebotMap_jm/include/common/process_runner.h
+chrono
+-
+csignal
+-
+functional
+-
+string
+-
+sys/types.h
+-
+sys/wait.h
+-
+thread
+-
+unistd.h
 -
 
 /home/jianmi/grebotMap_jm/include/common/utils.h
@@ -1022,6 +1042,10 @@ memory
 array
 -
 cstdio
+-
+cstdlib
+-
+stdexcept
 -
 
 /home/jianmi/grebotMap_jm/include/http_map_uploader.h
@@ -1093,6 +1117,8 @@ maphandle.h
 /home/jianmi/grebotMap_jm/src/mapping/maphandle.h
 ../../include/common/log_manager.h
 /home/jianmi/grebotMap_jm/include/common/log_manager.h
+../../include/common/process_runner.h
+/home/jianmi/grebotMap_jm/include/common/process_runner.h
 ../../include/manager.h
 /home/jianmi/grebotMap_jm/include/manager.h
 chrono

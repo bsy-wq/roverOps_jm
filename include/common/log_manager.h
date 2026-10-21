@@ -1,6 +1,7 @@
 #pragma once
 
 #include <spdlog/spdlog.h>
+#include "utils.h"
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/daily_file_sink.h>
 
@@ -41,7 +42,7 @@ private:
 
 private:
     std::shared_ptr<spdlog::logger> logger_;
-    const std::string log_dir_ = "/home/jianmi/jm/log";
+    const std::string log_dir_ = get_home_dir() + "/log";
     const size_t max_files_ = 30;
     std::string log_file_path_;
 

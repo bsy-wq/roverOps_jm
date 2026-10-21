@@ -48,8 +48,22 @@ gateway::gateway()
 
 gateway::~gateway()
 {
-    stopping_.store(true, std::memory_order_release);
-    update_state(GatewayState::Stopping, "destructor");
+    stop();
+}
+
+void gateway::stop()
+{
+    std::lock_guard<std::mutex> stop_lock(stop_mutex_);
+    {
+        std::lock_guard<std::mutex> lock(worker_mutex_);
+        if (stopping_.exchange(true, std::memory_order_acq_rel)) {
+            return;
+        }
+    }
+    webserver_connected.store(false, std::memory_order_release);
+    heartbeat_connected.store(false, std::memory_order_release);
+    handset_connected.store(false, std::memory_order_release);
+    update_state(GatewayState::Stopping, "stop");
     ROS_INFO("[Gateway] 正在关闭系统...");
     if (ws_server.is_listening()) {
         websocketpp::lib::error_code ec;
@@ -66,7 +80,41 @@ gateway::~gateway()
     if (client_thread.joinable())
         client_thread.join();
 
+    std::vector<std::future<void>> workers;
+    {
+        std::lock_guard<std::mutex> lock(worker_mutex_);
+        workers.swap(workers_);
+    }
+    for (auto& worker : workers) {
+        try {
+            worker.get();
+        } catch (const std::exception& e) {
+            ROS_ERROR("[Gateway] shutdown worker failed: %s", e.what());
+        } catch (...) {
+            ROS_ERROR("[Gateway] shutdown worker failed");
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        message_callback_ = {};
+        connected_callback_ = {};
+        broadcast_callback_ = {};
+    }
     ROS_INFO("[Gateway] 系统已安全退出");
+}
+
+void gateway::start_background_task(std::function<void()> task)
+{
+    std::lock_guard<std::mutex> lock(worker_mutex_);
+    if (stopping_.load(std::memory_order_acquire)) {
+        return;
+    }
+    // Completed futures can be released without blocking the network thread.
+    workers_.erase(std::remove_if(workers_.begin(), workers_.end(),
+        [](std::future<void>& worker) {
+            return worker.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready;
+        }), workers_.end());
+    workers_.push_back(std::async(std::launch::async, std::move(task)));
 }
 
 bool gateway::start_server(uint16_t port)
@@ -360,7 +408,7 @@ void gateway::run_network_diagnostics(const char* reason)
     const std::string target_port = web_port_;
     const std::string url = webURL;
 
-    std::thread([this, reason_copy, target_host, target_port, url]() {
+    start_background_task([this, reason_copy, target_host, target_port, url]() {
         ROS_WARN("[NetDiag] WebSocket 断连诊断开始: reason=%s, url=%s, target=%s:%s",
                  reason_copy.c_str(), url.c_str(), target_host.c_str(), target_port.c_str());
 
@@ -394,7 +442,7 @@ void gateway::run_network_diagnostics(const char* reason)
         }
 
         network_diagnostic_running_.store(false, std::memory_order_release);
-    }).detach();
+    });
 }
 
 bool gateway::close_web_connection(const char* reason)
@@ -1031,7 +1079,7 @@ void gateway::on_message(connection_hdl hdl, server::message_ptr msg)
         if (payload_type == "control" || payload_type == "action_control") {
             invoke_callback();
         } else {
-            std::thread(invoke_callback).detach();
+            start_background_task(std::move(invoke_callback));
         }
     }
 
@@ -1090,12 +1138,13 @@ void gateway::setConnectedCallback(std::function<void()> cb)
 
 bool gateway::isWebConnected() const
 {
-    return webserver_connected.load(std::memory_order_acquire);
+    return !stopping_.load(std::memory_order_acquire) &&
+        webserver_connected.load(std::memory_order_acquire);
 }
 
 bool gateway::sendToWeb(const std::string& payload)
 {
-    if (!webserver_connected.load(std::memory_order_acquire))
+    if (!isWebConnected())
     {
         return false;
     }

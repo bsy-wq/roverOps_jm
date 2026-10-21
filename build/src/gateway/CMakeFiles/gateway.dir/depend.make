@@ -3,6 +3,7 @@
 
 src/gateway/CMakeFiles/gateway.dir/gateway.cc.o: ../include/common/json.hpp
 src/gateway/CMakeFiles/gateway.dir/gateway.cc.o: ../include/common/log_manager.h
+src/gateway/CMakeFiles/gateway.dir/gateway.cc.o: ../include/common/utils.h
 src/gateway/CMakeFiles/gateway.dir/gateway.cc.o: ../src/gateway/gateway.cc
 src/gateway/CMakeFiles/gateway.dir/gateway.cc.o: ../src/gateway/gateway.h
 src/gateway/CMakeFiles/gateway.dir/gateway.cc.o: /opt/ros/noetic/include/ros/advertise_options.h

@@ -26,6 +26,7 @@ enum class MotionMode {
     Following,
     Navigating,
     Mapping,
+    MappingProcessing,
     Stopping,
     Failed
 };

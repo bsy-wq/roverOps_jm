@@ -24,6 +24,7 @@ set(CMAKE_CXX_TARGET_INCLUDE_PATH
   "../config"
   "../src"
   "/home/jianmi/catkin_ws/devel/include"
+  "/home/jianmi/lhh_workspace/catkin_ws/devel/include"
   "../src/robotState"
   )
 

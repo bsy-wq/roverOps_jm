@@ -1,6 +1,7 @@
 #include "maphandle.h"
 
 #include "../../include/common/log_manager.h"
+#include "../../include/common/process_runner.h"
 #include "../../include/manager.h"
 
 #include <chrono>
@@ -22,8 +23,6 @@ MappingHandle::MappingHandle(std::string device_id,
                              std::string scripts_path,
                              std::string map_dir,
                              std::vector<std::string> map_files,
-                             pid_t& mapping_process,
-                             std::mutex& process_mutex,
                              MapManager* map_manager,
                              SendToCloud send_to_cloud,
                              LogFileAccess log_file_access,
@@ -31,13 +30,13 @@ MappingHandle::MappingHandle(std::string device_id,
                              ShellQuote shell_quote,
                              LogRuntimeFlags log_runtime_flags,
                              LogWaitStatus log_wait_status,
-                             FinishCommand finish_command)
+                             FinishCommand finish_command,
+                             MappingResult mapping_result,
+                             ShutdownRequested shutdown_requested)
     : device_id_(std::move(device_id)),
       scripts_path_(std::move(scripts_path)),
       map_dir_(std::move(map_dir)),
       map_files_(std::move(map_files)),
-      mapping_process_(mapping_process),
-      process_mutex_(process_mutex),
       map_manager_(map_manager),
       send_to_cloud_(std::move(send_to_cloud)),
       log_file_access_(std::move(log_file_access)),
@@ -45,14 +44,26 @@ MappingHandle::MappingHandle(std::string device_id,
       shell_quote_(std::move(shell_quote)),
       log_runtime_flags_(std::move(log_runtime_flags)),
       log_wait_status_(std::move(log_wait_status)),
-      finish_command_(std::move(finish_command)) {}
+      finish_command_(std::move(finish_command)),
+      mapping_result_(std::move(mapping_result)),
+      shutdown_requested_(std::move(shutdown_requested)) {}
+
+bool MappingHandle::is_running() const {
+    std::lock_guard<std::mutex> lock(process_mutex_);
+    return mapping_process_ > 0;
+}
+
+pid_t MappingHandle::current_pid() const {
+    std::lock_guard<std::mutex> lock(process_mutex_);
+    return mapping_process_;
+}
 
 void MappingHandle::handle_start_mapping(const json& data) {
     ROS_INFO("    ======================= 开始建图 (handle_start_mapping) =======================    ");
 
-    fs::remove("/home/jianmi/g_build_map/all_raw_points.pcd");
-    fs::remove("/home/jianmi/g_build_map/gloabl_map.pcd");
-    fs::remove("/home/jianmi/g_build_map/gloabl_map.pickle");
+    fs::remove(get_home_dir() + "/g_build_map/all_raw_points.pcd");
+    fs::remove(get_home_dir() + "/g_build_map/gloabl_map.pcd");
+    fs::remove(get_home_dir() + "/g_build_map/gloabl_map.pickle");
 
     LOG_INFO(" 开始建图 (handle_start_mapping) ... ");
     LOG_INFO("[Mapping] start_mapping begin, payload={}", data.dump());
@@ -106,6 +117,14 @@ void MappingHandle::handle_start_mapping(const json& data) {
         ROS_ERROR("Fork failed");
         LOG_ERROR("[Mapping] fork failed for mapping.sh, errno={}, error={}",
                   errno, std::strerror(errno));
+        if (send_to_cloud_) {
+            send_to_cloud_(json{
+                {"type", "start_mapping"},
+                {"code", -1},
+                {"localTime", getTimeNow()},
+                {"message", "建图进程启动失败"}
+            }.dump());
+        }
         return;
     }
 
@@ -154,6 +173,21 @@ void MappingHandle::stop_and_uploadmap_async(json data) {
     if (log_runtime_flags_) {
         log_runtime_flags_("stop_and_uploadmap_begin");
     }
+
+    bool result_reported = false;
+    auto report_result = [this, &result_reported](bool success, const std::string& reason) {
+        if (result_reported) return;
+        result_reported = true;
+        if (!mapping_result_) return;
+        try {
+            mapping_result_(success, reason);
+        } catch (const std::exception& e) {
+            LOG_ERROR("[Mapping] mapping_result callback failed: {}", e.what());
+        } catch (...) {
+            LOG_ERROR("[Mapping] mapping_result callback failed with unknown exception");
+        }
+    };
+
     std::string display_name = data.value("display_name", "Unnamed Map");
     std::string address = data.value("address", "");
 
@@ -169,7 +203,27 @@ void MappingHandle::stop_and_uploadmap_async(json data) {
 
         kill(-mapping_pid, SIGINT);
         int mapping_status = 0;
-        waitpid(mapping_pid, &mapping_status, 0); // 等待主进程退出
+        bool exited = false;
+        for (int attempt = 0; attempt < 30; ++attempt) {
+            const pid_t ret = waitpid(mapping_pid, &mapping_status, WNOHANG);
+            if (ret == mapping_pid || ret < 0) {
+                exited = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        if (!exited) {
+            LOG_ERROR("[Mapping] mapping.sh did not exit after SIGINT, killing pid={}", mapping_pid);
+            kill(-mapping_pid, SIGKILL);
+            for (int attempt = 0; attempt < 10; ++attempt) {
+                const pid_t ret = waitpid(mapping_pid, &mapping_status, WNOHANG);
+                if (ret == mapping_pid || ret < 0) {
+                    exited = true;
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
         if (log_wait_status_) {
             log_wait_status_("mapping.sh", mapping_status);
         }
@@ -179,7 +233,18 @@ void MappingHandle::stop_and_uploadmap_async(json data) {
                 mapping_process_ = -1;
             }
         }
-  
+        if (!exited) {
+            LOG_ERROR("[Mapping] failed to reap mapping.sh, pid={}", mapping_pid);
+            report_result(false, "建图进程无法停止");
+            if (log_runtime_flags_) {
+                log_runtime_flags_("stop_and_uploadmap_done");
+            }
+            if (finish_command_) {
+                finish_command_("stop_and_uploadmap");
+            }
+            return;
+        }
+
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         ROS_INFO("Running post-processing script...");
@@ -192,6 +257,7 @@ void MappingHandle::stop_and_uploadmap_async(json data) {
         if (!log_file_access_ ||
             !log_file_access_("map_process.sh", process_script, F_OK | R_OK)) {
             ROS_ERROR("Script not found: %s", process_script.c_str());
+            report_result(false, "建图后处理脚本不存在: " + process_script);
             if (log_runtime_flags_) {
                 log_runtime_flags_("stop_and_uploadmap_done");
             }
@@ -202,7 +268,8 @@ void MappingHandle::stop_and_uploadmap_async(json data) {
         }
 
         // 确保可执行（保险）
-        std::string chmod_cmd = "chmod +x " + process_script;
+        std::string chmod_cmd = "chmod +x " +
+            (shell_quote_ ? shell_quote_(process_script) : process_script);
         LOG_INFO("[Mapping] chmod command: {}", chmod_cmd);
         int chmod_ret = system(chmod_cmd.c_str());
         if (chmod_ret != 0) {
@@ -219,18 +286,31 @@ void MappingHandle::stop_and_uploadmap_async(json data) {
             "/bin/bash -c " +
             (shell_quote_ ? shell_quote_(process_command) : process_command);
         LOG_INFO("[Mapping] post process command: {}", process_cmd);
-        int ret = system(process_cmd.c_str());
+        int ret = process_runner::run_shell_command(
+            process_cmd,
+            std::chrono::seconds(600),
+            shutdown_requested_);
         LOG_INFO("[Mapping] post process command finished, status={}", ret);
 
         if (ret == 0) {
             ROS_INFO("Map processing completed successfully.");
             LOG_INFO("[Mapping] post process success");
 
-            std::string upload_path = "/home/jianmi/g_build_map";
-            auto [storage_path, uuid] = map_manager_
-                ? map_manager_->upload_map(device_id_, address, display_name, upload_path, map_files_)
-                : std::pair<std::string, std::string>{"", ""};
+            std::string upload_path = get_home_dir() + "/g_build_map";
+            std::pair<std::string, std::string> upload_result{"", ""};
+            try {
+                if (map_manager_) {
+                    upload_result = map_manager_->upload_map(
+                        device_id_, address, display_name, upload_path, map_files_);
+                }
+            } catch (const std::exception& e) {
+                LOG_ERROR("[Mapping] upload threw exception: {}", e.what());
+            } catch (...) {
+                LOG_ERROR("[Mapping] upload threw unknown exception");
+            }
 
+            const std::string& storage_path = upload_result.first;
+            const std::string& uuid = upload_result.second;
             std::string status_msg = storage_path.empty()
                 ? "completed_but_upload_failed"
                 : "completed_and_uploaded";
@@ -239,11 +319,13 @@ void MappingHandle::stop_and_uploadmap_async(json data) {
                 ROS_INFO("Map uploaded to server successfully!");
                 status_msg = "completed_and_uploaded";
                 LOG_INFO("[Mapping] upload success, storage_path={}, uuid={}", storage_path, uuid);
+                report_result(true, "");
             } else {
                 ROS_ERROR("Map processing succeeded but upload failed.");
                 status_msg = "completed_but_upload_failed";
                 LOG_ERROR("[Mapping] upload failed after post process, address={}, display_name={}, map_dir={}",
                           address, display_name, map_dir_);
+                report_result(false, "地图上传失败");
             }
 
             json msg3 = {
@@ -269,12 +351,17 @@ void MappingHandle::stop_and_uploadmap_async(json data) {
             if (log_wait_status_) {
                 log_wait_status_("map_process.sh", ret);
             }
+            report_result(false, "建图后处理失败, status=" + std::to_string(ret));
         }
 
     } else {
         ROS_WARN("No mapping process currently running.");
         LOG_WARN("[Mapping] stop_and_uploadmap ignored: no mapping process running");
+        report_result(false, "没有正在运行的建图进程");
     }
+    // Every path above reports exactly once; this is a safety net for future
+    // edits that add a return without reporting.
+    report_result(false, "建图流程异常结束");
     if (log_runtime_flags_) {
         log_runtime_flags_("stop_and_uploadmap_done");
     }

@@ -4,6 +4,8 @@ project(robot_dog)
 
 set(CMAKE_CXX_STANDARD 17)
 
+set(USER_HOME "$ENV{HOME}")
+
 find_package(catkin REQUIRED COMPONENTS
     roscpp
     geometry_msgs
@@ -30,8 +32,8 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-if(EXISTS "/home/jianmi/catkin_ws/devel/include/robot_gateway")
-    include_directories(/home/jianmi/catkin_ws/devel/include)
+if(EXISTS "${USER_HOME}/catkin_ws/devel/include/robot_gateway")
+    include_directories("${USER_HOME}/catkin_ws/devel/include")
 endif()
 
 # 模块
@@ -45,9 +47,27 @@ add_subdirectory(src/motionControl)
 add_subdirectory(src/broadcast)
 add_subdirectory(src/follow)
 
+# Run against an isolated ROS master; this target never runs during a normal build.
+add_executable(battery_provider_integration_test EXCLUDE_FROM_ALL
+    tests/battery_integration_test.cc)
+target_link_libraries(battery_provider_integration_test
+    bms robotState ${catkin_LIBRARIES} Threads::Threads OpenSSL::SSL OpenSSL::Crypto)
+if(A10_BMS_INCLUDE_DIR)
+    target_include_directories(battery_provider_integration_test PRIVATE ${A10_BMS_INCLUDE_DIR})
+    target_compile_definitions(battery_provider_integration_test PRIVATE HAVE_A10_BMS=1)
+endif()
+
+# Behavior priority matrix; no ROS or hardware required.
+add_executable(robot_fsm_priority_test EXCLUDE_FROM_ALL
+    tests/robot_fsm_priority_test.cc)
+target_link_libraries(robot_fsm_priority_test Threads::Threads)
+
 add_executable(${PROJECT_NAME}
     src/main.cc
     src/CommandExecutor.cc
+    src/handlers/NavigationLifecycleHandler.cc
+    src/handlers/MapWorkflowHandler.cc
+    src/handlers/DeviceHandler.cc
     src/localWebsocket/LocalWebsocketServer.cc
     src/aiRecognition/AiRecognitionAckHandler.cc
     # src/BmsForwarder.cc

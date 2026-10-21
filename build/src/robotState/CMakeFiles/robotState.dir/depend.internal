@@ -3,7 +3,7 @@
 
 src/robotState/CMakeFiles/robotState.dir/robotState.cc.o
  ../include/common/json.hpp
- /home/jianmi/catkin_ws/devel/include/robot_gateway/M20BmsState.h
+ ../src/bms/BatteryProvider.h
  /home/jianmi/grebotMap_jm/src/robotState/robotState.cc
  /home/jianmi/grebotMap_jm/src/robotState/robotState.h
  /opt/ros/noetic/include/ros/advertise_options.h

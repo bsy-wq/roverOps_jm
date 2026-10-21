@@ -1,4 +1,5 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/bms.dir/BatteryProvider.cc.o"
   "CMakeFiles/bms.dir/BmsForwarder.cc.o"
   "libbms.pdb"
   "libbms.so"

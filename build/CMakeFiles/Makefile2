@@ -131,13 +131,15 @@ clean: CMakeFiles/nav_msgs_generate_messages_nodejs.dir/clean
 clean: CMakeFiles/sensor_msgs_generate_messages_cpp.dir/clean
 clean: CMakeFiles/sensor_msgs_generate_messages_eus.dir/clean
 clean: CMakeFiles/sensor_msgs_generate_messages_lisp.dir/clean
+clean: CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean
 clean: CMakeFiles/nav_msgs_generate_messages_py.dir/clean
 clean: CMakeFiles/tf_generate_messages_lisp.dir/clean
-clean: CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean
 clean: CMakeFiles/tf_generate_messages_nodejs.dir/clean
 clean: CMakeFiles/actionlib_generate_messages_nodejs.dir/clean
-clean: CMakeFiles/tf2_msgs_generate_messages_lisp.dir/clean
 clean: CMakeFiles/tf2_msgs_generate_messages_nodejs.dir/clean
+clean: CMakeFiles/tf2_msgs_generate_messages_lisp.dir/clean
+clean: CMakeFiles/battery_provider_integration_test.dir/clean
+clean: CMakeFiles/robot_fsm_priority_test.dir/clean
 clean: gtest/clean
 clean: src/bms/clean
 clean: src/gateway/clean
@@ -520,12 +522,12 @@ CMakeFiles/robot_dog.dir/all: src/broadcast/CMakeFiles/broadcast.dir/all
 CMakeFiles/robot_dog.dir/all: src/follow/CMakeFiles/follow.dir/all
 	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/depend
 	$(MAKE) -f CMakeFiles/robot_dog.dir/build.make CMakeFiles/robot_dog.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=27,28,29,30,31 "Built target robot_dog"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=30,31,32,33,34,35,36,37 "Built target robot_dog"
 .PHONY : CMakeFiles/robot_dog.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/robot_dog.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 23
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 27
 	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/robot_dog.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
 .PHONY : CMakeFiles/robot_dog.dir/rule
@@ -1702,6 +1704,33 @@ CMakeFiles/sensor_msgs_generate_messages_lisp.dir/clean:
 .PHONY : CMakeFiles/sensor_msgs_generate_messages_lisp.dir/clean
 
 #=============================================================================
+# Target rules for target CMakeFiles/sensor_msgs_generate_messages_nodejs.dir
+
+# All Build rule for target.
+CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all:
+	$(MAKE) -f CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/depend
+	$(MAKE) -f CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num= "Built target sensor_msgs_generate_messages_nodejs"
+.PHONY : CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all
+
+# Build rule for subdir invocation for target.
+CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
+.PHONY : CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_nodejs: CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_nodejs
+
+# clean rule for target.
+CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean:
+	$(MAKE) -f CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean
+.PHONY : CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean
+
+#=============================================================================
 # Target rules for target CMakeFiles/nav_msgs_generate_messages_py.dir
 
 # All Build rule for target.
@@ -1754,33 +1783,6 @@ tf_generate_messages_lisp: CMakeFiles/tf_generate_messages_lisp.dir/rule
 CMakeFiles/tf_generate_messages_lisp.dir/clean:
 	$(MAKE) -f CMakeFiles/tf_generate_messages_lisp.dir/build.make CMakeFiles/tf_generate_messages_lisp.dir/clean
 .PHONY : CMakeFiles/tf_generate_messages_lisp.dir/clean
-
-#=============================================================================
-# Target rules for target CMakeFiles/sensor_msgs_generate_messages_nodejs.dir
-
-# All Build rule for target.
-CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all:
-	$(MAKE) -f CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/depend
-	$(MAKE) -f CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num= "Built target sensor_msgs_generate_messages_nodejs"
-.PHONY : CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all
-
-# Build rule for subdir invocation for target.
-CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
-.PHONY : CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-sensor_msgs_generate_messages_nodejs: CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule
-
-.PHONY : sensor_msgs_generate_messages_nodejs
-
-# clean rule for target.
-CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean:
-	$(MAKE) -f CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean
-.PHONY : CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean
 
 #=============================================================================
 # Target rules for target CMakeFiles/tf_generate_messages_nodejs.dir
@@ -1837,33 +1839,6 @@ CMakeFiles/actionlib_generate_messages_nodejs.dir/clean:
 .PHONY : CMakeFiles/actionlib_generate_messages_nodejs.dir/clean
 
 #=============================================================================
-# Target rules for target CMakeFiles/tf2_msgs_generate_messages_lisp.dir
-
-# All Build rule for target.
-CMakeFiles/tf2_msgs_generate_messages_lisp.dir/all:
-	$(MAKE) -f CMakeFiles/tf2_msgs_generate_messages_lisp.dir/build.make CMakeFiles/tf2_msgs_generate_messages_lisp.dir/depend
-	$(MAKE) -f CMakeFiles/tf2_msgs_generate_messages_lisp.dir/build.make CMakeFiles/tf2_msgs_generate_messages_lisp.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num= "Built target tf2_msgs_generate_messages_lisp"
-.PHONY : CMakeFiles/tf2_msgs_generate_messages_lisp.dir/all
-
-# Build rule for subdir invocation for target.
-CMakeFiles/tf2_msgs_generate_messages_lisp.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/tf2_msgs_generate_messages_lisp.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
-.PHONY : CMakeFiles/tf2_msgs_generate_messages_lisp.dir/rule
-
-# Convenience name for target.
-tf2_msgs_generate_messages_lisp: CMakeFiles/tf2_msgs_generate_messages_lisp.dir/rule
-
-.PHONY : tf2_msgs_generate_messages_lisp
-
-# clean rule for target.
-CMakeFiles/tf2_msgs_generate_messages_lisp.dir/clean:
-	$(MAKE) -f CMakeFiles/tf2_msgs_generate_messages_lisp.dir/build.make CMakeFiles/tf2_msgs_generate_messages_lisp.dir/clean
-.PHONY : CMakeFiles/tf2_msgs_generate_messages_lisp.dir/clean
-
-#=============================================================================
 # Target rules for target CMakeFiles/tf2_msgs_generate_messages_nodejs.dir
 
 # All Build rule for target.
@@ -1891,6 +1866,88 @@ CMakeFiles/tf2_msgs_generate_messages_nodejs.dir/clean:
 .PHONY : CMakeFiles/tf2_msgs_generate_messages_nodejs.dir/clean
 
 #=============================================================================
+# Target rules for target CMakeFiles/tf2_msgs_generate_messages_lisp.dir
+
+# All Build rule for target.
+CMakeFiles/tf2_msgs_generate_messages_lisp.dir/all:
+	$(MAKE) -f CMakeFiles/tf2_msgs_generate_messages_lisp.dir/build.make CMakeFiles/tf2_msgs_generate_messages_lisp.dir/depend
+	$(MAKE) -f CMakeFiles/tf2_msgs_generate_messages_lisp.dir/build.make CMakeFiles/tf2_msgs_generate_messages_lisp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num= "Built target tf2_msgs_generate_messages_lisp"
+.PHONY : CMakeFiles/tf2_msgs_generate_messages_lisp.dir/all
+
+# Build rule for subdir invocation for target.
+CMakeFiles/tf2_msgs_generate_messages_lisp.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/tf2_msgs_generate_messages_lisp.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
+.PHONY : CMakeFiles/tf2_msgs_generate_messages_lisp.dir/rule
+
+# Convenience name for target.
+tf2_msgs_generate_messages_lisp: CMakeFiles/tf2_msgs_generate_messages_lisp.dir/rule
+
+.PHONY : tf2_msgs_generate_messages_lisp
+
+# clean rule for target.
+CMakeFiles/tf2_msgs_generate_messages_lisp.dir/clean:
+	$(MAKE) -f CMakeFiles/tf2_msgs_generate_messages_lisp.dir/build.make CMakeFiles/tf2_msgs_generate_messages_lisp.dir/clean
+.PHONY : CMakeFiles/tf2_msgs_generate_messages_lisp.dir/clean
+
+#=============================================================================
+# Target rules for target CMakeFiles/battery_provider_integration_test.dir
+
+# All Build rule for target.
+CMakeFiles/battery_provider_integration_test.dir/all: src/bms/CMakeFiles/bms.dir/all
+CMakeFiles/battery_provider_integration_test.dir/all: src/robotState/CMakeFiles/robotState.dir/all
+	$(MAKE) -f CMakeFiles/battery_provider_integration_test.dir/build.make CMakeFiles/battery_provider_integration_test.dir/depend
+	$(MAKE) -f CMakeFiles/battery_provider_integration_test.dir/build.make CMakeFiles/battery_provider_integration_test.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=1,2 "Built target battery_provider_integration_test"
+.PHONY : CMakeFiles/battery_provider_integration_test.dir/all
+
+# Build rule for subdir invocation for target.
+CMakeFiles/battery_provider_integration_test.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 7
+	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/battery_provider_integration_test.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
+.PHONY : CMakeFiles/battery_provider_integration_test.dir/rule
+
+# Convenience name for target.
+battery_provider_integration_test: CMakeFiles/battery_provider_integration_test.dir/rule
+
+.PHONY : battery_provider_integration_test
+
+# clean rule for target.
+CMakeFiles/battery_provider_integration_test.dir/clean:
+	$(MAKE) -f CMakeFiles/battery_provider_integration_test.dir/build.make CMakeFiles/battery_provider_integration_test.dir/clean
+.PHONY : CMakeFiles/battery_provider_integration_test.dir/clean
+
+#=============================================================================
+# Target rules for target CMakeFiles/robot_fsm_priority_test.dir
+
+# All Build rule for target.
+CMakeFiles/robot_fsm_priority_test.dir/all:
+	$(MAKE) -f CMakeFiles/robot_fsm_priority_test.dir/build.make CMakeFiles/robot_fsm_priority_test.dir/depend
+	$(MAKE) -f CMakeFiles/robot_fsm_priority_test.dir/build.make CMakeFiles/robot_fsm_priority_test.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=38,39 "Built target robot_fsm_priority_test"
+.PHONY : CMakeFiles/robot_fsm_priority_test.dir/all
+
+# Build rule for subdir invocation for target.
+CMakeFiles/robot_fsm_priority_test.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 2
+	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/robot_fsm_priority_test.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
+.PHONY : CMakeFiles/robot_fsm_priority_test.dir/rule
+
+# Convenience name for target.
+robot_fsm_priority_test: CMakeFiles/robot_fsm_priority_test.dir/rule
+
+.PHONY : robot_fsm_priority_test
+
+# clean rule for target.
+CMakeFiles/robot_fsm_priority_test.dir/clean:
+	$(MAKE) -f CMakeFiles/robot_fsm_priority_test.dir/build.make CMakeFiles/robot_fsm_priority_test.dir/clean
+.PHONY : CMakeFiles/robot_fsm_priority_test.dir/clean
+
+#=============================================================================
 # Target rules for target gtest/googlemock/CMakeFiles/gmock_main.dir
 
 # All Build rule for target.
@@ -1898,7 +1955,7 @@ gtest/googlemock/CMakeFiles/gmock_main.dir/all: gtest/googlemock/CMakeFiles/gmoc
 gtest/googlemock/CMakeFiles/gmock_main.dir/all: gtest/googletest/CMakeFiles/gtest.dir/all
 	$(MAKE) -f gtest/googlemock/CMakeFiles/gmock_main.dir/build.make gtest/googlemock/CMakeFiles/gmock_main.dir/depend
 	$(MAKE) -f gtest/googlemock/CMakeFiles/gmock_main.dir/build.make gtest/googlemock/CMakeFiles/gmock_main.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=11,12 "Built target gmock_main"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=14,15 "Built target gmock_main"
 .PHONY : gtest/googlemock/CMakeFiles/gmock_main.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1925,7 +1982,7 @@ gtest/googlemock/CMakeFiles/gmock_main.dir/clean:
 gtest/googlemock/CMakeFiles/gmock.dir/all: gtest/googletest/CMakeFiles/gtest.dir/all
 	$(MAKE) -f gtest/googlemock/CMakeFiles/gmock.dir/build.make gtest/googlemock/CMakeFiles/gmock.dir/depend
 	$(MAKE) -f gtest/googlemock/CMakeFiles/gmock.dir/build.make gtest/googlemock/CMakeFiles/gmock.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=9,10 "Built target gmock"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=12,13 "Built target gmock"
 .PHONY : gtest/googlemock/CMakeFiles/gmock.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1952,7 +2009,7 @@ gtest/googlemock/CMakeFiles/gmock.dir/clean:
 gtest/googletest/CMakeFiles/gtest_main.dir/all: gtest/googletest/CMakeFiles/gtest.dir/all
 	$(MAKE) -f gtest/googletest/CMakeFiles/gtest_main.dir/build.make gtest/googletest/CMakeFiles/gtest_main.dir/depend
 	$(MAKE) -f gtest/googletest/CMakeFiles/gtest_main.dir/build.make gtest/googletest/CMakeFiles/gtest_main.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=15,16 "Built target gtest_main"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=18,19 "Built target gtest_main"
 .PHONY : gtest/googletest/CMakeFiles/gtest_main.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1979,7 +2036,7 @@ gtest/googletest/CMakeFiles/gtest_main.dir/clean:
 gtest/googletest/CMakeFiles/gtest.dir/all:
 	$(MAKE) -f gtest/googletest/CMakeFiles/gtest.dir/build.make gtest/googletest/CMakeFiles/gtest.dir/depend
 	$(MAKE) -f gtest/googletest/CMakeFiles/gtest.dir/build.make gtest/googletest/CMakeFiles/gtest.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=13,14 "Built target gtest"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=16,17 "Built target gtest"
 .PHONY : gtest/googletest/CMakeFiles/gtest.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2006,12 +2063,12 @@ gtest/googletest/CMakeFiles/gtest.dir/clean:
 src/bms/CMakeFiles/bms.dir/all:
 	$(MAKE) -f src/bms/CMakeFiles/bms.dir/build.make src/bms/CMakeFiles/bms.dir/depend
 	$(MAKE) -f src/bms/CMakeFiles/bms.dir/build.make src/bms/CMakeFiles/bms.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=1,2 "Built target bms"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=3,4,5 "Built target bms"
 .PHONY : src/bms/CMakeFiles/bms.dir/all
 
 # Build rule for subdir invocation for target.
 src/bms/CMakeFiles/bms.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 2
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 3
 	$(MAKE) -f CMakeFiles/Makefile2 src/bms/CMakeFiles/bms.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/jianmi/grebotMap_jm/build/CMakeFiles 0
 .PHONY : src/bms/CMakeFiles/bms.dir/rule
@@ -2033,7 +2090,7 @@ src/bms/CMakeFiles/bms.dir/clean:
 src/gateway/CMakeFiles/gateway.dir/all:
 	$(MAKE) -f src/gateway/CMakeFiles/gateway.dir/build.make src/gateway/CMakeFiles/gateway.dir/depend
 	$(MAKE) -f src/gateway/CMakeFiles/gateway.dir/build.make src/gateway/CMakeFiles/gateway.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=7,8 "Built target gateway"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=10,11 "Built target gateway"
 .PHONY : src/gateway/CMakeFiles/gateway.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2060,7 +2117,7 @@ src/gateway/CMakeFiles/gateway.dir/clean:
 src/mapping/CMakeFiles/mapping.dir/all:
 	$(MAKE) -f src/mapping/CMakeFiles/mapping.dir/build.make src/mapping/CMakeFiles/mapping.dir/depend
 	$(MAKE) -f src/mapping/CMakeFiles/mapping.dir/build.make src/mapping/CMakeFiles/mapping.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=19,20 "Built target mapping"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=22,23 "Built target mapping"
 .PHONY : src/mapping/CMakeFiles/mapping.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2087,7 +2144,7 @@ src/mapping/CMakeFiles/mapping.dir/clean:
 src/hikvision/CMakeFiles/hikvision.dir/all:
 	$(MAKE) -f src/hikvision/CMakeFiles/hikvision.dir/build.make src/hikvision/CMakeFiles/hikvision.dir/depend
 	$(MAKE) -f src/hikvision/CMakeFiles/hikvision.dir/build.make src/hikvision/CMakeFiles/hikvision.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=17,18 "Built target hikvision"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=20,21 "Built target hikvision"
 .PHONY : src/hikvision/CMakeFiles/hikvision.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2114,7 +2171,7 @@ src/hikvision/CMakeFiles/hikvision.dir/clean:
 src/robotState/CMakeFiles/robotState.dir/all:
 	$(MAKE) -f src/robotState/CMakeFiles/robotState.dir/build.make src/robotState/CMakeFiles/robotState.dir/depend
 	$(MAKE) -f src/robotState/CMakeFiles/robotState.dir/build.make src/robotState/CMakeFiles/robotState.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=25,26 "Built target robotState"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=28,29 "Built target robotState"
 .PHONY : src/robotState/CMakeFiles/robotState.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2141,7 +2198,7 @@ src/robotState/CMakeFiles/robotState.dir/clean:
 src/modifyValue/CMakeFiles/modifyValue.dir/all:
 	$(MAKE) -f src/modifyValue/CMakeFiles/modifyValue.dir/build.make src/modifyValue/CMakeFiles/modifyValue.dir/depend
 	$(MAKE) -f src/modifyValue/CMakeFiles/modifyValue.dir/build.make src/modifyValue/CMakeFiles/modifyValue.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=21,22 "Built target modifyValue"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=24,25 "Built target modifyValue"
 .PHONY : src/modifyValue/CMakeFiles/modifyValue.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2168,7 +2225,7 @@ src/modifyValue/CMakeFiles/modifyValue.dir/clean:
 src/motionControl/CMakeFiles/motionControl.dir/all:
 	$(MAKE) -f src/motionControl/CMakeFiles/motionControl.dir/build.make src/motionControl/CMakeFiles/motionControl.dir/depend
 	$(MAKE) -f src/motionControl/CMakeFiles/motionControl.dir/build.make src/motionControl/CMakeFiles/motionControl.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=23,24 "Built target motionControl"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=26,27 "Built target motionControl"
 .PHONY : src/motionControl/CMakeFiles/motionControl.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2195,7 +2252,7 @@ src/motionControl/CMakeFiles/motionControl.dir/clean:
 src/broadcast/CMakeFiles/broadcast.dir/all:
 	$(MAKE) -f src/broadcast/CMakeFiles/broadcast.dir/build.make src/broadcast/CMakeFiles/broadcast.dir/depend
 	$(MAKE) -f src/broadcast/CMakeFiles/broadcast.dir/build.make src/broadcast/CMakeFiles/broadcast.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=3,4 "Built target broadcast"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=6,7 "Built target broadcast"
 .PHONY : src/broadcast/CMakeFiles/broadcast.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2222,7 +2279,7 @@ src/broadcast/CMakeFiles/broadcast.dir/clean:
 src/follow/CMakeFiles/follow.dir/all:
 	$(MAKE) -f src/follow/CMakeFiles/follow.dir/build.make src/follow/CMakeFiles/follow.dir/depend
 	$(MAKE) -f src/follow/CMakeFiles/follow.dir/build.make src/follow/CMakeFiles/follow.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=5,6 "Built target follow"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/jianmi/grebotMap_jm/build/CMakeFiles --progress-num=8,9 "Built target follow"
 .PHONY : src/follow/CMakeFiles/follow.dir/all
 
 # Build rule for subdir invocation for target.

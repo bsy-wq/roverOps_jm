@@ -418,6 +418,40 @@ ros/builtin_message_traits.h
 ros/message_operations.h
 -
 
+/home/jianmi/grebotMap_jm/src/bms/BatteryProvider.cc
+BatteryProvider.h
+/home/jianmi/grebotMap_jm/src/bms/BatteryProvider.h
+algorithm
+-
+atomic
+-
+cctype
+-
+mutex
+-
+utility
+-
+vector
+-
+robot_gateway/M20BmsState.h
+-
+bms_ros_bridge/BmsStatus.h
+-
+
+/home/jianmi/grebotMap_jm/src/bms/BatteryProvider.h
+chrono
+-
+functional
+-
+memory
+-
+string
+-
+ros/ros.h
+-
+common/json.hpp
+/home/jianmi/grebotMap_jm/src/bms/common/json.hpp
+
 /home/jianmi/grebotMap_jm/src/bms/BmsForwarder.cc
 BmsForwarder.h
 /home/jianmi/grebotMap_jm/src/bms/BmsForwarder.h
@@ -455,10 +489,6 @@ utility
 -
 vector
 -
-robot_gateway/M20BmsState.h
--
-bms_ros_bridge/BmsStatus.h
--
 
 /home/jianmi/grebotMap_jm/src/bms/BmsForwarder.h
 memory
@@ -467,8 +497,8 @@ string
 -
 functional
 -
-ros/ros.h
--
+BatteryProvider.h
+/home/jianmi/grebotMap_jm/src/bms/BatteryProvider.h
 
 /opt/ros/noetic/include/ros/advertise_options.h
 ros/forwards.h

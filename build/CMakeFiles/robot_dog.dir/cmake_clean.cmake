@@ -1,6 +1,9 @@
 file(REMOVE_RECURSE
   "CMakeFiles/robot_dog.dir/src/CommandExecutor.cc.o"
   "CMakeFiles/robot_dog.dir/src/aiRecognition/AiRecognitionAckHandler.cc.o"
+  "CMakeFiles/robot_dog.dir/src/handlers/DeviceHandler.cc.o"
+  "CMakeFiles/robot_dog.dir/src/handlers/MapWorkflowHandler.cc.o"
+  "CMakeFiles/robot_dog.dir/src/handlers/NavigationLifecycleHandler.cc.o"
   "CMakeFiles/robot_dog.dir/src/localWebsocket/LocalWebsocketServer.cc.o"
   "CMakeFiles/robot_dog.dir/src/main.cc.o"
   "robot_dog"

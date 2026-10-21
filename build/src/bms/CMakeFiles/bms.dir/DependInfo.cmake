@@ -4,6 +4,7 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_CXX
+  "/home/jianmi/grebotMap_jm/src/bms/BatteryProvider.cc" "/home/jianmi/grebotMap_jm/build/src/bms/CMakeFiles/bms.dir/BatteryProvider.cc.o"
   "/home/jianmi/grebotMap_jm/src/bms/BmsForwarder.cc" "/home/jianmi/grebotMap_jm/build/src/bms/CMakeFiles/bms.dir/BmsForwarder.cc.o"
   )
 set(CMAKE_CXX_COMPILER_ID "GNU")
@@ -24,6 +25,7 @@ set(CMAKE_CXX_TARGET_INCLUDE_PATH
   "../config"
   "../src"
   "/home/jianmi/catkin_ws/devel/include"
+  "/home/jianmi/lhh_workspace/catkin_ws/devel/include"
   "../src/bms"
   )
 

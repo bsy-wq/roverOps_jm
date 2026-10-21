@@ -1,0 +1,26 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/jianmi/grebotMap_jm/include/RobotFsm.h
+../src/robotDto.h
+/home/jianmi/grebotMap_jm/src/robotDto.h
+mutex
+-
+
+/home/jianmi/grebotMap_jm/src/robotDto.h
+string
+-
+
+/home/jianmi/grebotMap_jm/tests/robot_fsm_priority_test.cc
+../include/RobotFsm.h
+/home/jianmi/grebotMap_jm/include/RobotFsm.h
+iostream
+-
+string
+-
+

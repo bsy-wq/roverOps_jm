@@ -182,6 +182,33 @@ bms/fast:
 	cd /home/jianmi/grebotMap_jm/build && $(MAKE) -f src/bms/CMakeFiles/bms.dir/build.make src/bms/CMakeFiles/bms.dir/build
 .PHONY : bms/fast
 
+BatteryProvider.o: BatteryProvider.cc.o
+
+.PHONY : BatteryProvider.o
+
+# target to build an object file
+BatteryProvider.cc.o:
+	cd /home/jianmi/grebotMap_jm/build && $(MAKE) -f src/bms/CMakeFiles/bms.dir/build.make src/bms/CMakeFiles/bms.dir/BatteryProvider.cc.o
+.PHONY : BatteryProvider.cc.o
+
+BatteryProvider.i: BatteryProvider.cc.i
+
+.PHONY : BatteryProvider.i
+
+# target to preprocess a source file
+BatteryProvider.cc.i:
+	cd /home/jianmi/grebotMap_jm/build && $(MAKE) -f src/bms/CMakeFiles/bms.dir/build.make src/bms/CMakeFiles/bms.dir/BatteryProvider.cc.i
+.PHONY : BatteryProvider.cc.i
+
+BatteryProvider.s: BatteryProvider.cc.s
+
+.PHONY : BatteryProvider.s
+
+# target to generate assembly for a file
+BatteryProvider.cc.s:
+	cd /home/jianmi/grebotMap_jm/build && $(MAKE) -f src/bms/CMakeFiles/bms.dir/build.make src/bms/CMakeFiles/bms.dir/BatteryProvider.cc.s
+.PHONY : BatteryProvider.cc.s
+
 BmsForwarder.o: BmsForwarder.cc.o
 
 .PHONY : BmsForwarder.o
@@ -223,6 +250,9 @@ help:
 	@echo "... test"
 	@echo "... install/strip"
 	@echo "... bms"
+	@echo "... BatteryProvider.o"
+	@echo "... BatteryProvider.i"
+	@echo "... BatteryProvider.s"
 	@echo "... BmsForwarder.o"
 	@echo "... BmsForwarder.i"
 	@echo "... BmsForwarder.s"

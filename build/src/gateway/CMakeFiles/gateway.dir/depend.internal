@@ -4,6 +4,7 @@
 src/gateway/CMakeFiles/gateway.dir/gateway.cc.o
  ../include/common/json.hpp
  ../include/common/log_manager.h
+ ../include/common/utils.h
  /home/jianmi/grebotMap_jm/src/gateway/gateway.cc
  /home/jianmi/grebotMap_jm/src/gateway/gateway.h
  /opt/ros/noetic/include/ros/advertise_options.h

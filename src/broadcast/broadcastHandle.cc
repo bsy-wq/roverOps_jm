@@ -13,7 +13,7 @@ Broadcast::Broadcast(std::string device_id, std::string http_ip, int http_port,
 
 bool Broadcast::download_broadcast(const std::string& filename, const std::string& http_ip, const int& http_port) {
     std::string cmd = "curl -f -L http://" + http_ip + ":" + std::to_string(http_port) +
-                      "/download_broadcast/" + filename + " -o /home/jianmi/yq/" + filename;
+                      "/download_broadcast/" + filename + " -o " + get_home_dir() + "/yq/" + filename;
 
     std::cout << "cmd: " << cmd << std::endl;
 

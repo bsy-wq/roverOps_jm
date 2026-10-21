@@ -1340,6 +1340,8 @@ src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../src/mapping/maphandle.cc \
   /usr/local/include/spdlog/details/synchronous_factory.h \
   /usr/local/include/spdlog/version.h \
   /usr/local/include/spdlog/spdlog-inl.h \
+  ../include/common/utils.h \
+  ../include/common/json.hpp \
   /usr/local/include/spdlog/sinks/basic_file_sink.h \
   /usr/local/include/spdlog/details/file_helper.h \
   /usr/local/include/spdlog/details/file_helper-inl.h \
@@ -1457,12 +1459,8 @@ src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../src/mapping/maphandle.cc \
   /usr/include/aarch64-linux-gnu/curl/multi.h \
   /usr/include/aarch64-linux-gnu/curl/curl.h \
   /usr/include/aarch64-linux-gnu/curl/urlapi.h \
-  ../include/common/utils.h \
-  ../include/common/json.hpp \
   /usr/include/aarch64-linux-gnu/sys/wait.h
 
-
-../include/common/utils.h:
 
 /usr/include/aarch64-linux-gnu/curl/easy.h:
 
@@ -1575,6 +1573,8 @@ src/mapping/CMakeFiles/mapping.dir/maphandle.cc.o: ../src/mapping/maphandle.cc \
 /usr/local/include/spdlog/details/file_helper.h:
 
 /usr/local/include/spdlog/sinks/basic_file_sink.h:
+
+../include/common/utils.h:
 
 /usr/local/include/spdlog/spdlog-inl.h:
 

@@ -1604,47 +1604,6 @@ CMakeFiles/robot_dog.dir/src/CommandExecutor.cc.o: \
  /usr/include/boost/thread/detail/atomic_redef_macros.hpp \
  /opt/ros/noetic/include/tf2_ros/transform_listener.h \
  /opt/ros/noetic/include/tf2_msgs/TFMessage.h \
- /usr/local/include/pct_planner/MultiWaypointNavigationAction.h \
- /usr/local/include/pct_planner/MultiWaypointNavigationActionGoal.h \
- /opt/ros/noetic/include/actionlib_msgs/GoalID.h \
- /usr/local/include/pct_planner/MultiWaypointNavigationGoal.h \
- /usr/local/include/pct_planner/MultiWaypointNavigationActionResult.h \
- /opt/ros/noetic/include/actionlib_msgs/GoalStatus.h \
- /usr/local/include/pct_planner/MultiWaypointNavigationResult.h \
- /usr/local/include/pct_planner/MultiWaypointNavigationActionFeedback.h \
- /usr/local/include/pct_planner/MultiWaypointNavigationFeedback.h \
- /opt/ros/noetic/include/actionlib/client/simple_action_client.h \
- /usr/include/boost/thread/condition.hpp \
- /opt/ros/noetic/include/actionlib/client/action_client.h \
- /opt/ros/noetic/include/actionlib/client/client_helpers.h \
- /usr/include/boost/interprocess/sync/scoped_lock.hpp \
- /usr/include/boost/interprocess/detail/config_begin.hpp \
- /usr/include/boost/interprocess/detail/workaround.hpp \
- /usr/include/boost/interprocess/interprocess_fwd.hpp \
- /usr/include/boost/interprocess/detail/std_fwd.hpp \
- /usr/include/boost/interprocess/detail/config_end.hpp \
- /usr/include/boost/interprocess/sync/lock_options.hpp \
- /usr/include/boost/interprocess/exceptions.hpp \
- /usr/include/boost/interprocess/errors.hpp \
- /usr/include/boost/interprocess/detail/mpl.hpp \
- /usr/include/boost/interprocess/detail/type_traits.hpp \
- /usr/include/boost/interprocess/detail/posix_time_types_wrk.hpp \
- /usr/include/boost/interprocess/detail/simple_swap.hpp \
- /opt/ros/noetic/include/actionlib/action_definition.h \
- /opt/ros/noetic/include/actionlib/managed_list.h \
- /opt/ros/noetic/include/actionlib/destruction_guard.h \
- /opt/ros/noetic/include/actionlib/enclosure_deleter.h \
- /opt/ros/noetic/include/actionlib/goal_id_generator.h \
- /opt/ros/noetic/include/actionlib/decl.h \
- /opt/ros/noetic/include/actionlib/client/comm_state.h \
- /opt/ros/noetic/include/actionlib/client/terminal_state.h \
- /opt/ros/noetic/include/actionlib_msgs/GoalStatusArray.h \
- /opt/ros/noetic/include/actionlib/client/goal_manager_imp.h \
- /opt/ros/noetic/include/actionlib/client/client_goal_handle_imp.h \
- /opt/ros/noetic/include/actionlib/client/comm_state_machine_imp.h \
- /opt/ros/noetic/include/actionlib/client/connection_monitor.h \
- /opt/ros/noetic/include/actionlib/client/simple_goal_state.h \
- /opt/ros/noetic/include/actionlib/client/simple_client_goal_state.h \
  /usr/include/aarch64-linux-gnu/curl/curl.h \
  /usr/include/aarch64-linux-gnu/curl/curlver.h \
  /usr/include/aarch64-linux-gnu/curl/system.h \
@@ -1668,7 +1627,7 @@ CMakeFiles/robot_dog.dir/src/CommandExecutor.cc.o: \
  /home/jianmi/grebotMap_jm/src/hikvision/../../include/common/json.hpp \
  /home/jianmi/grebotMap_jm/src/robotState/robotState.h \
  /home/jianmi/grebotMap_jm/include/common/json.hpp \
- /home/jianmi/catkin_ws/devel/include/robot_gateway/M20BmsState.h \
+ /home/jianmi/grebotMap_jm/src/bms/BatteryProvider.h \
  /home/jianmi/grebotMap_jm/src/modifyValue/modifyHandle.h \
  /usr/local/include/tinyxml2.h /usr/local/include/yaml-cpp/yaml.h \
  /usr/local/include/yaml-cpp/parser.h /usr/local/include/yaml-cpp/dll.h \
@@ -1765,6 +1724,8 @@ CMakeFiles/robot_dog.dir/src/CommandExecutor.cc.o: \
  /usr/local/include/spdlog/sinks/daily_file_sink.h \
  /usr/local/include/spdlog/fmt/chrono.h \
  /usr/local/include/spdlog/fmt/bundled/chrono.h \
+ /home/jianmi/grebotMap_jm/src/broadcast/broadcastHandle.h \
+ /home/jianmi/grebotMap_jm/src/follow/followHandle.h \
  /home/jianmi/grebotMap_jm/src/gateway/gateway.h \
  /usr/local/include/websocketpp/client.hpp \
  /usr/local/include/websocketpp/roles/client_endpoint.hpp \
